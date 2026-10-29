@@ -315,6 +315,7 @@ function fromApp(a) {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
     accent: a.accentPreset || 'violet', customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
     titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: a.iconColor || 'classic',
+    intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),
     skipNudity: !!a.skipNudity, subLang: a.subtitleLanguage || 'en', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
     autoNext: a.autoPlayNext ?? true, lang: a.language || raw.get('lumio.deviceLang', 'en'),
@@ -328,6 +329,7 @@ function toApp(w, base) {
   return Object.assign({}, base, {
     tmdbKey: w.tmdbKey, region: w.region, accentPreset: w.accent, customAccent: hexToLong(w.customAccent), amoled: !!w.amoled,
     titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'classic',
+    introAnimation: w.intro !== false, introSound: w.introSound !== false,
     skipIntro: w.skipIntro.toUpperCase(), skipRecap: w.skipRecap.toUpperCase(), skipCredits: w.skipCredits.toUpperCase(), skipNudity: !!w.skipNudity,
     subtitleLanguage: w.subLang, subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
     iptvSources: w.iptv || [], favChannels: w.favs || [], recentChannels: w.recents || [],
@@ -514,12 +516,21 @@ const isContinue = e => e && e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95;
 const progressOf = e => e && e.dur > 0 ? Math.min(1, e.pos / e.dur) : 0;
 
 /** The Lumio icon (gradient square + play mark) in one of the Appearance colours, as a PNG data URL. */
+/** The app icon in any colour: a soft pool of light on the icon colour + the wand writing the L (icons/mark.png). */
+const MARK_IMG = new Image();
+MARK_IMG.onload = () => { applyTheme(); if (document.querySelector('.ap-icons')) appearanceView(); };
+MARK_IMG.src = 'icons/mark.png';
+function mixHex(a, b, t) {
+  const pa = [1, 3, 5].map(i => parseInt(a.substr(i, 2), 16)), pb = [1, 3, 5].map(i => parseInt(b.substr(i, 2), 16));
+  return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
 function iconURL(key, size = 180) {
   const p = ICONS.find(x => x[0] === key) || ICONS[0];
   const c = document.createElement('canvas'); c.width = c.height = size;
-  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, size, size);
-  gr.addColorStop(0, p[2]); gr.addColorStop(1, p[3]); g.fillStyle = gr; g.fillRect(0, 0, size, size);
-  const w = size / 108; g.fillStyle = '#fff'; g.beginPath(); g.moveTo(44 * w, 36 * w); g.lineTo(74 * w, 54 * w); g.lineTo(44 * w, 72 * w); g.closePath(); g.fill();
+  const g = c.getContext('2d'), gr = g.createRadialGradient(size / 2, size * 0.42, 0, size / 2, size * 0.42, size * 0.8);
+  gr.addColorStop(0, mixHex(p[2], p[3], 0.45)); gr.addColorStop(0.6, p[3]); gr.addColorStop(1, mixHex(p[3], '#000000', 0.55));
+  g.fillStyle = gr; g.fillRect(0, 0, size, size);
+  if (MARK_IMG.complete && MARK_IMG.naturalWidth) g.drawImage(MARK_IMG, 0, 0, size, size);
   return c.toDataURL('image/png');
 }
 const titleHex = () => { const t = TITLES.find(x => x[0] === S.titleColor) || TITLES[0]; return t[2] || getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#FFFFFF'; };
@@ -2067,6 +2078,8 @@ function appearanceView() {
         <button class="dot custom ${S.accent === 'custom' ? 'on' : ''}" data-acc="custom"><i><span style="background:${esc(S.customAccent)}">${ic('check')}</span></i>${T("Custom")}</button></div>
       ${S.accent === 'custom' ? `<div style="padding-top:14px"><input type="color" id="custc" value="${esc(S.customAccent)}" aria-label="Custom colour"></div>` : ''}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("AMOLED black")}</b><small>${T("Use pure black backgrounds for OLED screens")}</small></div>${sw('amoled', S.amoled)}</div></div>
+    <div class="card"><div class="set-row"><div><b>${T("Startup animation")}</b><small>${T("The wand writes the L when Lumio opens (any key or tap skips it)")}</small></div>${sw('apintro', S.intro !== false)}</div>
+      ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; never plays over your music or when the phone is on silent")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Title colour")}</b><small class="dim">${T("Page titles and section headings")}</small>
       <div class="colors" style="padding-top:14px">${TITLES.map(([k, n, c]) => `<button class="dot ${S.titleColor === k ? 'on' : ''}" data-title="${k}"><i style="background:${c || 'var(--accent)'}">${ic('check')}</i>${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Arabic font")}</b><small class="dim">${T("Used when the app is in Arabic. Movie titles stay in English letters.")}</small>
@@ -2078,6 +2091,8 @@ function appearanceView() {
   const set = patch => { Object.assign(S, patch); saveSettings(); appearanceView(); };
   $('#apcin').onclick = () => set({ accent: 'cinema', titleColor: 'cinema', arabicFont: 'cinema', iconColor: 'cinema' });
   $('#amoled').onclick = () => set({ amoled: !S.amoled });
+  $('#apintro').onclick = () => set({ intro: S.intro === false });
+  $('#apintros') && ($('#apintros').onclick = () => set({ introSound: S.introSound === false }));
   view.querySelectorAll('[data-acc]').forEach(b => b.onclick = () => set({ accent: b.dataset.acc }));
   $('#custc')?.addEventListener('input', e => { S.customAccent = e.target.value; saveSettings(); });
   $('#custc')?.addEventListener('change', () => appearanceView());
@@ -2411,6 +2426,7 @@ if (SESSION) loadSyncState();
 if (SESSION) { PROFILE_ID = raw.get('lumio.activeProfile.' + SESSION.uid, MAIN); if (!profiles().some(p => p.id === PROFILE_ID)) PROFILE_ID = MAIN; }
 loadProfileData();
 applyTheme(); applyLang();
+playIntro();
 if (location.hash === '#/play') history.replaceState(null, '', '#/home');
 let PENDING_PARTY = (location.hash.match(/^#\/party\/([A-Za-z0-9]{4,8})/) || [])[1] || null;
 if (location.hash.startsWith('#/tv')) tvLinkView();   // opened from the QR code on Lumio TV
@@ -2420,6 +2436,37 @@ else {
   // Fetch the latest from the account (changes made on the phone app or another browser)
   refreshFromCloud();
 }
+/**
+ * Startup animation: the wand writes the L and the light blooms (same video as the apps, portrait or landscape to
+ * fit the screen). Once per visit, only when opening the site normally; any key, click or tap skips it.
+ * Browsers don't allow sound before you've touched the page, so it plays muted when they say no.
+ */
+function playIntro() {
+  try {
+    if (S.intro === false || sessionStorage.getItem('lumio.intro')) return;
+    if (location.hash && !/^#\/?(home)?$/.test(location.hash)) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    sessionStorage.setItem('lumio.intro', '1');
+  } catch { return; }
+  const wide = innerWidth > innerHeight;
+  const box = document.createElement('div'); box.className = 'intro';
+  box.innerHTML = `<video playsinline preload="auto" src="intro-${wide ? 'landscape' : 'portrait'}.mp4"></video>`;
+  document.body.appendChild(box);
+  const v = box.querySelector('video');
+  let gone = false;
+  const done = () => {
+    if (gone) return; gone = true; v.pause();
+    box.classList.add('out'); setTimeout(() => box.remove(), 340);
+    removeEventListener('keydown', done, true);
+  };
+  v.onended = done; v.onerror = done;
+  box.addEventListener('pointerdown', done);
+  addEventListener('keydown', done, true);
+  setTimeout(done, 7000);
+  v.muted = S.introSound === false;
+  v.play().catch(() => { v.muted = true; v.play().catch(done); });
+}
+
 /** Download the latest and, if anything changed, apply it right away (colours, language, profiles, history…). */
 async function refreshFromCloud() {
   const before = JSON.stringify(CD);
