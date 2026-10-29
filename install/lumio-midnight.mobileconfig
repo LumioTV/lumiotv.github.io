@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>FullScreen</key><true/>
+			<key>Icon</key><data>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</data>
+			<key>IsRemovable</key><true/>
+			<key>Label</key><string>Lumio</string>
+			<key>Precomposed</key><true/>
+			<key>URL</key><string>https://akalkandari.github.io/Lumio-web/</string>
+			<key>PayloadDescription</key><string>Adds Lumio to your Home Screen</string>
+			<key>PayloadDisplayName</key><string>Lumio app</string>
+			<key>PayloadIdentifier</key><string>com.lumio.web.clip</string>
+			<key>PayloadType</key><string>com.apple.webClip.managed</string>
+			<key>PayloadUUID</key><string>2CB3BF83-4515-5DDF-93E5-D3ADD743A919</string>
+			<key>PayloadVersion</key><integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key><string>Installs Lumio on your Home Screen as a full-screen app. Nothing else on your iPhone is changed. Remove it any time in Settings → General → VPN &amp; Device Management.</string>
+	<key>PayloadDisplayName</key><string>Lumio</string>
+	<key>PayloadIdentifier</key><string>com.lumio.web</string>
+	<key>PayloadOrganization</key><string>Lumio</string>
+	<key>PayloadRemovalDisallowed</key><false/>
+	<key>PayloadType</key><string>Configuration</string>
+	<key>PayloadUUID</key><string>BF5535B3-5716-5BD7-9407-E66E5D387236</string>
+	<key>PayloadVersion</key><integer>1</integer>
+</dict>
+</plist>

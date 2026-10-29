@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>FullScreen</key><true/>
+			<key>Icon</key><data>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</data>
+			<key>IsRemovable</key><true/>
+			<key>Label</key><string>Lumio</string>
+			<key>Precomposed</key><true/>
+			<key>URL</key><string>https://akalkandari.github.io/Lumio-web/</string>
+			<key>PayloadDescription</key><string>Adds Lumio to your Home Screen</string>
+			<key>PayloadDisplayName</key><string>Lumio app</string>
+			<key>PayloadIdentifier</key><string>com.lumio.web.clip</string>
+			<key>PayloadType</key><string>com.apple.webClip.managed</string>
+			<key>PayloadUUID</key><string>0D6B4F47-44F4-528B-9EE3-C0C61E41D426</string>
+			<key>PayloadVersion</key><integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key><string>Installs Lumio on your Home Screen as a full-screen app. Nothing else on your iPhone is changed. Remove it any time in Settings → General → VPN &amp; Device Management.</string>
+	<key>PayloadDisplayName</key><string>Lumio</string>
+	<key>PayloadIdentifier</key><string>com.lumio.web</string>
+	<key>PayloadOrganization</key><string>Lumio</string>
+	<key>PayloadRemovalDisallowed</key><false/>
+	<key>PayloadType</key><string>Configuration</string>
+	<key>PayloadUUID</key><string>AFEAFC87-B3F6-591E-BFB7-7DFD9415E7BF</string>
+	<key>PayloadVersion</key><integer>1</integer>
+</dict>
+</plist>
