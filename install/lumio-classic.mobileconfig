@@ -10,12 +10,12 @@
 			<key>IsRemovable</key><true/>
 			<key>Label</key><string>Lumio</string>
 			<key>Precomposed</key><true/>
-			<key>URL</key><string>https://akalkandari.github.io/Lumio-web/</string>
+			<key>URL</key><string>https://lumiotv.github.io/</string>
 			<key>PayloadDescription</key><string>Adds Lumio to your Home Screen</string>
 			<key>PayloadDisplayName</key><string>Lumio app</string>
 			<key>PayloadIdentifier</key><string>com.lumio.web.clip</string>
 			<key>PayloadType</key><string>com.apple.webClip.managed</string>
-			<key>PayloadUUID</key><string>C0DB98C6-BB70-5AA9-93EC-7C8F6248369B</string>
+			<key>PayloadUUID</key><string>BE5E67E3-6FA8-5F55-AB86-4FE405485838</string>
 			<key>PayloadVersion</key><integer>1</integer>
 		</dict>
 	</array>
@@ -25,7 +25,7 @@
 	<key>PayloadOrganization</key><string>Lumio</string>
 	<key>PayloadRemovalDisallowed</key><false/>
 	<key>PayloadType</key><string>Configuration</string>
-	<key>PayloadUUID</key><string>0B55019F-7C05-5986-8655-B1B82D055D92</string>
+	<key>PayloadUUID</key><string>3950249F-11AF-5E05-B2DF-51B3901C8880</string>
 	<key>PayloadVersion</key><integer>1</integer>
 </dict>
 </plist>
