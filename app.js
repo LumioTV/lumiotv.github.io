@@ -2079,7 +2079,7 @@ function appearanceView() {
       ${S.accent === 'custom' ? `<div style="padding-top:14px"><input type="color" id="custc" value="${esc(S.customAccent)}" aria-label="Custom colour"></div>` : ''}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("AMOLED black")}</b><small>${T("Use pure black backgrounds for OLED screens")}</small></div>${sw('amoled', S.amoled)}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("Startup animation")}</b><small>${T("The wand writes the L when Lumio opens (any key or tap skips it)")}</small></div>${sw('apintro', S.intro !== false)}</div>
-      ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; never plays over your music or when the phone is on silent")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
+      ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; plays at your media volume and never over your music")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Title colour")}</b><small class="dim">${T("Page titles and section headings")}</small>
       <div class="colors" style="padding-top:14px">${TITLES.map(([k, n, c]) => `<button class="dot ${S.titleColor === k ? 'on' : ''}" data-title="${k}"><i style="background:${c || 'var(--accent)'}">${ic('check')}</i>${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Arabic font")}</b><small class="dim">${T("Used when the app is in Arabic. Movie titles stay in English letters.")}</small>

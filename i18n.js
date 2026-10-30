@@ -836,7 +836,7 @@ window.LUMIO_AR = {
 "Startup animation": "حركة البداية",
 "The wand writes the L when Lumio opens (any key or tap skips it)": "العصا السحرية تكتب حرف L عند فتح Lumio (أي زر أو لمسة يتخطّاها)",
 "Startup sound": "صوت البداية",
-"Soft and short; never plays over your music or when the phone is on silent": "هادئ وقصير؛ لا يعمل فوق موسيقاك ولا عندما يكون الهاتف صامتًا",
+"Soft and short; plays at your media volume and never over your music": "هادئ وقصير؛ يعمل بمستوى صوت الوسائط ولا يعمل فوق موسيقاك",
 "Animated tiles": "البطاقات المتحركة",
 "On TV, only the row you're on moves by default — the smoothest on every TV": "على التلفزيون يتحرك الصف الذي أنت فيه فقط افتراضيًا — الأكثر سلاسة على كل تلفزيون",
 "Franchises, studios, genres and more come alive": "السلاسل والاستوديوهات والتصنيفات وغيرها تنبض بالحياة",
@@ -846,5 +846,8 @@ window.LUMIO_AR = {
 "Moving": "متحركة",
 "Startup animation, sound and animated tiles": "حركة البداية والصوت والبطاقات المتحركة",
 "Frame-rate meter": "مقياس سلاسة العرض",
+"you have": "لديك",
+"Try again": "حاول مجددًا",
+"Franchises, studios, genres and more come alive — Lumio sets the pace so scrolling always stays smooth": "السلاسل والاستوديوهات والتصنيفات وغيرها تنبض بالحياة — ويضبط Lumio سرعتها لتبقى الحركة سلسة دائمًا",
 "Shows in a corner how smoothly Lumio draws: frames per second and late frames (stutters). This device only.": "يعرض في الزاوية مدى سلاسة Lumio: عدد الإطارات في الثانية والإطارات المتأخرة (التقطيع). لهذا الجهاز فقط."
 };
