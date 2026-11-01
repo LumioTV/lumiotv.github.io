@@ -11,7 +11,7 @@ const BUILT_IN_ADDONS = [
   { url: 'https://subdl.strem.top/c3ViZGxfM1ZZYVFfcUVoa2d1a0hOZlBlSXBDTFVHNWczS0NfRTF1bFBJMzI2M2lOQS9BUi9oaUV4Y2x1ZGUv/manifest.json', name: 'SubDL Subtitles', resources: ['subtitles'], builtIn: true },
 ];
 const ACCENTS = [
-  ['violet', 'Violet', '#7C5CFF'], ['cinema', 'Cinema', '#E3262F'], ['ocean', 'Ocean', '#2D8CFF'], ['emerald', 'Emerald', '#10B981'], ['ruby', 'Ruby', '#FF3B5C'],
+  ['midnight', 'Midnight', '#5A6080'], ['violet', 'Violet', '#7C5CFF'], ['cinema', 'Cinema', '#E3262F'], ['ocean', 'Ocean', '#2D8CFF'], ['emerald', 'Emerald', '#10B981'], ['ruby', 'Ruby', '#FF3B5C'],
   ['sunset', 'Sunset', '#FF7A1A'], ['gold', 'Gold', '#F5B700'], ['sakura', 'Sakura', '#FF5FA8'],
 ];
 // Settings → Appearance (same choices as the phone and TV apps; saved in your account)
@@ -314,7 +314,11 @@ const sharingAddons = () => { const p = activeProfile(); return p.id !== MAIN &&
 const hexToLong = h => 0xFF000000 + parseInt(String(h).replace('#', '').slice(0, 6) || '7C5CFF', 16);
 const longToHex = n => '#' + ((Number(n) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
 function rawSettings(id) { const v = jparse(CD[kS(id)], null); return v || (id === MAIN ? {} : rawSettings(MAIN)); }
-const BUILT_IN_ADDONS_VERSION = 3;
+const BUILT_IN_ADDONS_VERSION = 4;
+/** The old Classic look's olive custom colour (yellow-green) — switched once to Midnight (v4, same as the apps). */
+function isOliveHex(h) { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx === mn || mx === 0) return false; const s = (mx - mn) / mx; let hue = mx === r ? (g - b) / (mx - mn) : mx === g ? 2 + (b - r) / (mx - mn) : 4 + (r - g) / (mx - mn); hue = (hue * 60 + 360) % 360;
+  return hue >= 50 && hue <= 90 && s > .25; }
 function fromApp(a) {
   const ver = a.builtInAddonsVersion || 0;
   let addons = Array.isArray(a.addons) ? a.addons.map(x => ({ url: x.manifestUrl, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
@@ -327,7 +331,7 @@ function fromApp(a) {
   const iconColor = ver < 3 && (a.iconColor || 'classic') === 'classic' ? 'midnight' : a.iconColor;
   return {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
-    accent: a.accentPreset || 'violet', customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
+    accent: ver < 4 && a.accentPreset === 'custom' && isOliveHex(longToHex(a.customAccent ?? 0xFF7C5CFF)) ? 'midnight' : (a.accentPreset || 'midnight'), customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
     titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: iconColor || 'midnight',
     intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),

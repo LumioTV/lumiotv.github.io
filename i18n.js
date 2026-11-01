@@ -887,5 +887,7 @@ window.LUMIO_AR = {
 "Add your TV provider's playlist in Live TV → My playlists": "أضف قائمة مزوّد التلفزيون من البث المباشر ← قوائمي",
 "TV Movie": "فيلم تلفزيوني",
 "Soap": "مسلسل طويل",
-"Talk": "حواري"
+"Talk": "حواري",
+"Removed from Favourites": "أُزيلت من المفضلة",
+"Added to Favourites": "أُضيفت إلى المفضلة"
 };
