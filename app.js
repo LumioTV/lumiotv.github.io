@@ -657,31 +657,40 @@ const metaLine = x => [T(x.media_type === 'tv' || x.first_air_date ? 'Series' : 
  * A trailer in the page (YouTube's privacy-friendly embed, no controls or suggestions), faded in once it really
  * plays. It reports back so the artwork can stay when a trailer can't be shown here.
  */
-function mountTrailer(box, key, { muted = true, loop = false, onPlay, onFail, onEnd } = {}) {
+function mountTrailer(box, key, { muted = true, loop = false, controls = false, onPlay, onFail, onEnd, onSound } = {}) {
   const f = document.createElement('iframe');
-  f.className = 'yt'; f.allow = 'autoplay; encrypted-media; picture-in-picture'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
-  f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(key)}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${loop ? '&loop=1&playlist=' + encodeURIComponent(key) : ''}`;
-  let played = false;
+  f.className = 'yt'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
+  // Always starts muted: every browser lets a muted video play by itself, while Safari (iPhone and Mac) freezes a
+  // trailer that tries to start with sound. The sound is turned on right after it starts moving, if the browser allows.
+  f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(key)}?autoplay=1&mute=1&controls=${controls ? 1 : 0}&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&disablekb=${controls ? 0 : 1}&fs=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${loop ? '&loop=1&playlist=' + encodeURIComponent(key) : ''}`;
+  let played = false, wantSound = !muted, soundAt = 0;
+  const cmd = (func, args = []) => f.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+  const trySound = () => { soundAt = performance.now(); cmd('unMute'); cmd('setVolume', [100]); cmd('playVideo'); onSound && onSound(true); };
+  const blocked = () => { soundAt = 0; wantSound = false; cmd('mute'); cmd('playVideo'); onSound && onSound(false); };
   const onMsg = e => {
     if (!f.isConnected) return removeEventListener('message', onMsg);
     if (e.source !== f.contentWindow) return;
     let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
     const state = d.event === 'onStateChange' ? d.info : d.event === 'infoDelivery' ? d.info?.playerState : undefined;
+    const recent = soundAt && performance.now() - soundAt < 2500;
     if (d.event === 'onError') { removeEventListener('message', onMsg); f.remove(); onFail && onFail(); }
-    else if (state === 1 && !played) { played = true; f.classList.add('on'); onPlay && onPlay(); }
+    else if (state === 1 && !played) { played = true; f.classList.add('on'); onPlay && onPlay(); if (wantSound) trySound(); }
+    else if (state === 2 && recent) blocked();                                   // the browser paused it for having sound
     else if (state === 0) { f.classList.remove('on'); onEnd && onEnd(); }
+    if (recent && d.event === 'infoDelivery' && d.info?.muted === true && performance.now() - soundAt > 1200) blocked();   // stayed muted
   };
   addEventListener('message', onMsg);
   f.onload = () => f.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
   box.appendChild(f);
-  return { el: f, cmd: (func, args = []) => f.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'), stop: () => { removeEventListener('message', onMsg); f.remove(); } };
+  return { el: f, cmd, setSound: on => { wantSound = on; if (!played) return; if (on) trySound(); else { soundAt = 0; cmd('mute'); onSound && onSound(false); } },
+    stop: () => { removeEventListener('message', onMsg); f.remove(); } };
 }
 /** Full-screen trailer with sound (Esc / Close). */
 function trailerOverlay(key) {
   const bg = document.createElement('div'); bg.className = 'trailer-full';
   bg.innerHTML = `<div class="spinner"></div><button class="icon-btn tf-x" aria-label="${T('Close')}">${ic('close')}</button>`;
   document.body.appendChild(bg);
-  const t = mountTrailer(bg, key, { muted: false, onPlay: () => $('.spinner', bg)?.remove(), onEnd: () => bg.remove(),
+  const t = mountTrailer(bg, key, { muted: false, controls: true, onPlay: () => $('.spinner', bg)?.remove(), onEnd: () => bg.remove(),
     onFail: () => { $('.spinner', bg)?.remove(); bg.insertAdjacentHTML('beforeend', `<p class="tf-msg">${T("This trailer isn't available right now")}</p>`); } });
   $('.tf-x', bg).onclick = () => { t.stop(); bg.remove(); };
   bg.onclick = e => { if (e.target === bg) { t.stop(); bg.remove(); } };
@@ -1376,13 +1385,14 @@ async function detailsView(type, id, token) {
   if (trKey && S.trailers !== 'off') setTimeout(() => {
     const box = $('#d-trailer'); if (!box || token !== routeToken) return;
     // Browsers only allow sound after you've clicked something on the page, which you have to get here
-    let muted = S.trailers === 'muted' || !navigator.userActivation?.hasBeenActive;
+    let muted = S.trailers === 'muted';
     const mb = $('#d-mute');
     detailTrailer = mountTrailer(box, trKey, { muted,
       onPlay: () => { mb.hidden = false; box.classList.add('on'); },
+      onSound: on => { muted = !on; mb.innerHTML = ic(on ? 'volOn' : 'volOff'); },
       onFail: () => { mb.hidden = true; }, onEnd: () => { mb.hidden = true; box.classList.remove('on'); detailTrailer?.stop(); } });
-    mb.innerHTML = ic(muted ? 'volOff' : 'volOn');
-    mb.onclick = () => { muted = !muted; detailTrailer.cmd(muted ? 'mute' : 'unMute'); if (!muted) detailTrailer.cmd('setVolume', [100]); mb.innerHTML = ic(muted ? 'volOff' : 'volOn'); };
+    mb.innerHTML = ic('volOff');
+    mb.onclick = () => detailTrailer.setSound(muted);
   }, 1200);
   $('#wl').onclick = () => {
     updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, { watch: !(cur && cur.watch) }));
