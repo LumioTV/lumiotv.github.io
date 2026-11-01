@@ -314,7 +314,7 @@ const sharingAddons = () => { const p = activeProfile(); return p.id !== MAIN &&
 const hexToLong = h => 0xFF000000 + parseInt(String(h).replace('#', '').slice(0, 6) || '7C5CFF', 16);
 const longToHex = n => '#' + ((Number(n) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
 function rawSettings(id) { const v = jparse(CD[kS(id)], null); return v || (id === MAIN ? {} : rawSettings(MAIN)); }
-const BUILT_IN_ADDONS_VERSION = 2;
+const BUILT_IN_ADDONS_VERSION = 3;
 function fromApp(a) {
   const ver = a.builtInAddonsVersion || 0;
   let addons = Array.isArray(a.addons) ? a.addons.map(x => ({ url: x.manifestUrl, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
@@ -322,11 +322,13 @@ function fromApp(a) {
     : (ver ? [] : BUILT_IN_ADDONS.slice());
   // v2 (same as the apps): OpenSubtitles built in, and Arabic subtitles by default
   if (ver < BUILT_IN_ADDONS_VERSION && Array.isArray(a.addons)) addons = [...BUILT_IN_ADDONS.filter(b => !addons.some(x => x.url === b.url)), ...addons];
-  const subLang = ver < BUILT_IN_ADDONS_VERSION && (a.subtitleLanguage || 'en') === 'en' ? 'ar' : (a.subtitleLanguage || 'ar');
+  const subLang = ver < 2 && (a.subtitleLanguage || 'en') === 'en' ? 'ar' : (a.subtitleLanguage || 'ar');
+  // v3: Midnight is Lumio's icon colour (the old default was Classic olive)
+  const iconColor = ver < 3 && (a.iconColor || 'classic') === 'classic' ? 'midnight' : a.iconColor;
   return {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
     accent: a.accentPreset || 'violet', customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
-    titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: a.iconColor || 'classic',
+    titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: iconColor || 'midnight',
     intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),
     skipNudity: !!a.skipNudity, subLang, trailers: a.trailerPreviews || 'sound', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
@@ -338,7 +340,7 @@ function fromApp(a) {
 function toApp(w, base) {
   return Object.assign({}, base, {
     tmdbKey: w.tmdbKey, region: w.region, accentPreset: w.accent, customAccent: hexToLong(w.customAccent), amoled: !!w.amoled,
-    titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'classic',
+    titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'midnight',
     introAnimation: w.intro !== false, introSound: w.introSound !== false,
     skipIntro: w.skipIntro.toUpperCase(), skipRecap: w.skipRecap.toUpperCase(), skipCredits: w.skipCredits.toUpperCase(), skipNudity: !!w.skipNudity,
     subtitleLanguage: w.subLang, trailerPreviews: w.trailers || 'sound', subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
@@ -551,7 +553,7 @@ function applyTheme() {
   const root = document.documentElement.classList;
   root.toggle('af-clear', S.arabicFont === 'clear'); root.toggle('af-ruqaa', S.arabicFont === 'ruqaa');
   // App icon colour: browser tab icon + iPhone home-screen icon (for new "Add to Home Screen")
-  if (S.iconColor && S.iconColor !== 'classic') {
+  if (S.iconColor && S.iconColor !== 'midnight') {
     for (const [rel, size] of [['icon', 64], ['apple-touch-icon', 180]]) {
       let l = document.querySelector(`link[rel="${rel}"]`); if (!l) { l = document.createElement('link'); l.rel = rel; document.head.appendChild(l); }
       l.href = iconURL(S.iconColor, size);
@@ -2775,7 +2777,7 @@ function playIntro() {
   } catch { return; }
   const wide = innerWidth > innerHeight;
   const box = document.createElement('div'); box.className = 'intro';
-  box.innerHTML = `<video playsinline preload="auto" src="intro-${wide ? 'landscape' : 'portrait'}.mp4"></video>`;
+  box.innerHTML = `<video playsinline preload="auto" src="intro-${wide ? 'landscape' : 'portrait'}.mp4?v=midnight"></video>`;
   document.body.appendChild(box);
   const v = box.querySelector('video');
   let gone = false;
