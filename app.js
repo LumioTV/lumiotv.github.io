@@ -7,6 +7,7 @@ const IMG = 'https://image.tmdb.org/t/p/';
 const BUILT_IN_ADDONS = [
   { url: 'https://catalog.nuvio.tv/manifest.json', name: 'Nuvio Catalogs', resources: ['catalog'], builtIn: true },
   { url: 'https://v3-cinemeta.strem.io/manifest.json', name: 'Cinemeta', resources: ['catalog', 'meta'], builtIn: true },
+  { url: 'https://opensubtitles-v3.strem.io/manifest.json', name: 'OpenSubtitles', resources: ['subtitles'], builtIn: true },
   { url: 'https://subdl.strem.top/c3ViZGxfM1ZZYVFfcUVoa2d1a0hOZlBlSXBDTFVHNWczS0NfRTF1bFBJMzI2M2lOQS9BUi9oaUV4Y2x1ZGUv/manifest.json', name: 'SubDL Subtitles', resources: ['subtitles'], builtIn: true },
 ];
 const ACCENTS = [
@@ -267,6 +268,9 @@ const P = {
   replay: 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z',
   remove: 'M7 11v2h10v-2H7zm5-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z',
   checkC: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+  volOn: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z',
+  volOff: 'M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z',
+  prevT: 'M6 6h2v12H6zm3.5 6l8.5 6V6z',
   lang: 'M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z',
 };
 const ic = (name, extra = '') => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" ${extra}><path d="${P[name]}"/></svg>`;
@@ -310,19 +314,25 @@ const sharingAddons = () => { const p = activeProfile(); return p.id !== MAIN &&
 const hexToLong = h => 0xFF000000 + parseInt(String(h).replace('#', '').slice(0, 6) || '7C5CFF', 16);
 const longToHex = n => '#' + ((Number(n) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
 function rawSettings(id) { const v = jparse(CD[kS(id)], null); return v || (id === MAIN ? {} : rawSettings(MAIN)); }
+const BUILT_IN_ADDONS_VERSION = 2;
 function fromApp(a) {
+  const ver = a.builtInAddonsVersion || 0;
+  let addons = Array.isArray(a.addons) ? a.addons.map(x => ({ url: x.manifestUrl, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
+      enabled: x.enabled !== false, configurable: !!x.configurable, version: x.version || '', description: x.description || null, logo: x.logo || null }))
+    : (ver ? [] : BUILT_IN_ADDONS.slice());
+  // v2 (same as the apps): OpenSubtitles built in, and Arabic subtitles by default
+  if (ver < BUILT_IN_ADDONS_VERSION && Array.isArray(a.addons)) addons = [...BUILT_IN_ADDONS.filter(b => !addons.some(x => x.url === b.url)), ...addons];
+  const subLang = ver < BUILT_IN_ADDONS_VERSION && (a.subtitleLanguage || 'en') === 'en' ? 'ar' : (a.subtitleLanguage || 'ar');
   return {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
     accent: a.accentPreset || 'violet', customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
     titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: a.iconColor || 'classic',
     intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),
-    skipNudity: !!a.skipNudity, subLang: a.subtitleLanguage || 'en', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
+    skipNudity: !!a.skipNudity, subLang, trailers: a.trailerPreviews || 'sound', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
     autoNext: a.autoPlayNext ?? true, lang: a.language || raw.get('lumio.deviceLang', 'en'),
     iptv: Array.isArray(a.iptvSources) ? a.iptvSources : [], favs: Array.isArray(a.favChannels) ? a.favChannels : [], recents: Array.isArray(a.recentChannels) ? a.recentChannels : [],
-    addons: Array.isArray(a.addons) ? a.addons.map(x => ({ url: x.manifestUrl, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
-        enabled: x.enabled !== false, configurable: !!x.configurable, version: x.version || '', description: x.description || null, logo: x.logo || null }))
-      : (a.builtInAddonsVersion ? [] : BUILT_IN_ADDONS.slice()),
+    addons,
   };
 }
 function toApp(w, base) {
@@ -331,11 +341,11 @@ function toApp(w, base) {
     titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'classic',
     introAnimation: w.intro !== false, introSound: w.introSound !== false,
     skipIntro: w.skipIntro.toUpperCase(), skipRecap: w.skipRecap.toUpperCase(), skipCredits: w.skipCredits.toUpperCase(), skipNudity: !!w.skipNudity,
-    subtitleLanguage: w.subLang, subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
+    subtitleLanguage: w.subLang, trailerPreviews: w.trailers || 'sound', subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
     iptvSources: w.iptv || [], favChannels: w.favs || [], recentChannels: w.recents || [],
     addons: w.addons.map(x => ({ manifestUrl: x.url, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
       enabled: x.enabled !== false, configurable: !!x.configurable, version: x.version || '', description: x.description || null, logo: x.logo || null })),
-    builtInAddonsVersion: Math.max(base.builtInAddonsVersion || 0, 1),
+    builtInAddonsVersion: Math.max(base.builtInAddonsVersion || 0, BUILT_IN_ADDONS_VERSION),
   });
 }
 // ---- library entries: app format ↔ web
@@ -591,7 +601,7 @@ const api = {
   trending: (type = 'all', win = 'week', page = 1) => tmdb(`trending/${type}/${win}?page=${page}`).then(r => typed(r.results, type)),
   list: (type, kind, page = 1) => tmdb(`${type}/${kind}?page=${page}`).then(r => typed(r.results, type)),
   search: q => tmdb(`search/multi?query=${encodeURIComponent(q)}&include_adult=false`).then(r => typed(r.results)),
-  details: (type, id) => tmdb(`${type}/${id}?append_to_response=external_ids,credits`),
+  details: (type, id) => tmdb(`${type}/${id}?append_to_response=external_ids,credits,images,videos&include_image_language=ar,en,null&include_video_language=en,ar,null`),
   person: id => tmdb(`person/${id}?append_to_response=combined_credits`),
   season: (id, n) => tmdb(`tv/${id}/season/${n}`).then(r => r.episodes || []),
   collection: id => tmdb(`collection/${id}`),
@@ -610,6 +620,66 @@ const api = {
     return tmdb(`discover/${type}?sort_by=${sort}&page=${page}${query.includes('watch_region=') ? '' : '&watch_region=' + region}&include_adult=false${extra}&${query}`).then(r => typed(r.results, type));
   },
 };
+
+// ---- Title logos & trailers (same picks as the phone and TV apps)
+const GENRE_NAMES = { 28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime', 99: 'Documentary', 18: 'Drama', 10751: 'Family',
+  14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi', 10770: 'TV Movie', 53: 'Thriller',
+  10752: 'War', 37: 'Western', 10759: 'Action', 10762: 'Kids', 10763: 'News', 10764: 'Reality', 10765: 'Sci-Fi', 10766: 'Soap', 10767: 'Talk', 10768: 'War' };
+const mainGenre = x => (x.genre_ids || []).map(g => GENRE_NAMES[g]).find(Boolean) || (x.genres || [])[0]?.name || null;
+/** Best logo: app language first, then English, then language-free art; most liked first. */
+function pickLogo(logos) {
+  const want = S.lang === 'ar' ? 'ar' : 'en', rank = l => l.iso_639_1 === want ? 0 : l.iso_639_1 === 'en' ? 1 : !l.iso_639_1 ? 2 : 3;
+  return (logos || []).filter(l => !/\.svg$/i.test(l.file_path)).sort((a, b) => rank(a) - rank(b) || (b.vote_average || 0) - (a.vote_average || 0))[0]?.file_path || null;
+}
+const logoCache = new Map();
+function logoPath(type, id) {
+  const k = `${type}-${id}-${S.lang}`;
+  if (!logoCache.has(k)) logoCache.set(k, tmdb(`${type}/${id}/images?include_image_language=ar,en,null`).then(r => pickLogo(r.logos)).catch(() => null));
+  return logoCache.get(k);
+}
+/** Official trailer → teaser → anything, on YouTube. */
+function bestTrailer(videos) {
+  const rank = v => ({ Trailer: 0, Teaser: 1 }[v.type] ?? 2) * 4 + (v.official ? 0 : 2) + (v.iso_639_1 === 'en' ? 0 : 1);
+  return ((videos && videos.results) || []).filter(v => v.site === 'YouTube' && v.key).sort((a, b) => rank(a) - rank(b))[0]?.key || null;
+}
+/** The title's logo art, or its name in type when there's none (or the picture fails). */
+const titleArt = (path, title, cls = '') => path
+  ? `<img class="tlogo ${cls}" src="${IMG}w500${path}" alt="${esc(title)}" onerror="this.outerHTML='<h1 class=&quot;tlogo-txt ${cls}&quot;>'+this.alt.replace(/[<&]/g,'')+'</h1>'">`
+  : `<h1 class="tlogo-txt ${cls}">${esc(title)}</h1>`;
+const metaLine = x => [T(x.media_type === 'tv' || x.first_air_date ? 'Series' : 'Movie'), mainGenre(x) && T(mainGenre(x)), yearOf(x)].filter(Boolean).join('  •  ');
+/**
+ * A trailer in the page (YouTube's privacy-friendly embed, no controls or suggestions), faded in once it really
+ * plays. It reports back so the artwork can stay when a trailer can't be shown here.
+ */
+function mountTrailer(box, key, { muted = true, loop = false, onPlay, onFail, onEnd } = {}) {
+  const f = document.createElement('iframe');
+  f.className = 'yt'; f.allow = 'autoplay; encrypted-media; picture-in-picture'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
+  f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(key)}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${loop ? '&loop=1&playlist=' + encodeURIComponent(key) : ''}`;
+  let played = false;
+  const onMsg = e => {
+    if (!f.isConnected) return removeEventListener('message', onMsg);
+    if (e.source !== f.contentWindow) return;
+    let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
+    const state = d.event === 'onStateChange' ? d.info : d.event === 'infoDelivery' ? d.info?.playerState : undefined;
+    if (d.event === 'onError') { removeEventListener('message', onMsg); f.remove(); onFail && onFail(); }
+    else if (state === 1 && !played) { played = true; f.classList.add('on'); onPlay && onPlay(); }
+    else if (state === 0) { f.classList.remove('on'); onEnd && onEnd(); }
+  };
+  addEventListener('message', onMsg);
+  f.onload = () => f.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+  box.appendChild(f);
+  return { el: f, cmd: (func, args = []) => f.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'), stop: () => { removeEventListener('message', onMsg); f.remove(); } };
+}
+/** Full-screen trailer with sound (Esc / Close). */
+function trailerOverlay(key) {
+  const bg = document.createElement('div'); bg.className = 'trailer-full';
+  bg.innerHTML = `<div class="spinner"></div><button class="icon-btn tf-x" aria-label="${T('Close')}">${ic('close')}</button>`;
+  document.body.appendChild(bg);
+  const t = mountTrailer(bg, key, { muted: false, onPlay: () => $('.spinner', bg)?.remove(), onEnd: () => bg.remove(),
+    onFail: () => { $('.spinner', bg)?.remove(); bg.insertAdjacentHTML('beforeend', `<p class="tf-msg">${T("This trailer isn't available right now")}</p>`); } });
+  $('.tf-x', bg).onclick = () => { t.stop(); bg.remove(); };
+  bg.onclick = e => { if (e.target === bg) { t.stop(); bg.remove(); } };
+}
 
 // Streaming services: resolve real ids & logos for the region
 let servicesReady = null;
@@ -651,16 +721,39 @@ async function fetchManifest(url) {
 }
 const quality = s => { s = s.toUpperCase(); return /2160|4K|UHD/.test(s) ? '4K' : /1080/.test(s) ? '1080p' : /720/.test(s) ? '720p' : ''; };
 const hdr = s => { s = s.toUpperCase(); return /DOLBY VISION|\bDV\b|DOVI/.test(s) ? 'Dolby Vision' : /HDR10\+/.test(s) ? 'HDR10+' : /HDR/.test(s) ? 'HDR' : ''; };
+const AUDIO_RANK = ['Dolby Atmos', 'Dolby TrueHD', 'DTS:X', 'DTS-HD MA', 'Dolby Digital+', 'Dolby Digital'];
+const audioTag = s => { s = s.toUpperCase();
+  return /ATMOS/.test(s) ? 'Dolby Atmos' : /TRUE-?HD/.test(s) ? 'Dolby TrueHD' : /DTS[:-]?X/.test(s) ? 'DTS:X' : /DTS-HD|DTS HD|DTS-MA/.test(s) ? 'DTS-HD MA'
+    : /\bDD\+|\bDDP|E-?AC-?3|DOLBY DIGITAL PLUS/.test(s) ? 'Dolby Digital+' : /\bDD\b|\bDD5|\bAC-?3\b|DOLBY DIGITAL/.test(s) ? 'Dolby Digital' : ''; };
+const sizeGb = s => { const m = s.match(/(\d+(?:[.,]\d+)?)\s*GB/i); return m ? parseFloat(m[1].replace(',', '.')) : 0; };
+/** What a source's description says, tidied up: instant (debrid cache), size, seeders, source, codec, channels, languages. */
+function srcInfo(st) {
+  const all = st.label + '\n' + st.details, up = all.toUpperCase();
+  return {
+    instant: /\[(RD|TB|AD|PM|DL|ED|OC|PK)\+]/.test(st.label) || st.label.includes('⚡'),
+    size: (all.match(/💾\s*([\d.,]+\s*[GMT]B)/) || all.match(/([\d.,]+\s*GB)\b/i) || [])[1] || null,
+    seeds: (all.match(/👤\s*(\d+)/) || [])[1] || null,
+    site: (all.match(/⚙️\s*([^\s\n]+)/) || [])[1] || null,
+    source: /REMUX/.test(up) ? 'Remux' : /BLU-?RAY|BDRIP/.test(up) ? 'Blu-ray' : /WEB-?DL/.test(up) ? 'WEB-DL' : /WEBRIP/.test(up) ? 'WEBRip' : /HDTV/.test(up) ? 'HDTV' : /\b(CAM|HDCAM|TS|TELESYNC)\b/.test(up) ? 'CAM' : null,
+    codec: /X265|H\.?265|HEVC/.test(up) ? 'HEVC' : /AV1/.test(up) ? 'AV1' : /X264|H\.?264|AVC/.test(up) ? 'H.264' : null,
+    channels: (up.match(/\b([257]\.1|2\.0)\b/) || [])[1] || null,
+    multi: /MULTI|DUAL/.test(up),
+    flags: [...new Set(st.details.match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu) || [])],
+    file: st.details.split('\n').map(x => x.trim()).find(x => x && !x.startsWith('👤')) || null,
+  };
+}
 async function getStreams(type, imdb, season, episode) {
   const st = type === 'tv' ? 'series' : 'movie';
   const id = season != null ? `${imdb}:${season}:${episode}` : imdb;
   const lists = await Promise.all(S.addons.filter(a => supports(a, 'stream')).map(a =>
     getJSON(`${addonBase(a)}/stream/${st}/${id}.json`).then(r => (r.streams || []).filter(x => x.url).map(x => {
       const label = (x.name || a.name).replace(/\n/g, ' '), details = [x.title, x.description].filter(Boolean).join('\n');
-      return { addon: a.name, label, details, url: x.url, q: quality(label + ' ' + details), h: hdr(label + ' ' + details) };
+      const all = label + ' ' + details;
+      return { addon: a.name, label, details, url: x.url, q: quality(all), h: hdr(all), a: audioTag(all), gb: sizeGb(all) };
     })).catch(() => [])));
-  const rank = s => ({ '4K': 0, '1080p': 1, '720p': 2 }[s.q] ?? 3) * 10 + ({ 'Dolby Vision': 0, 'HDR10+': 1, HDR: 2 }[s.h] ?? 3);
-  return lists.flat().sort((a, b) => rank(a) - rank(b));
+  // Best picture first, then the richest sound, then the biggest file (more bitrate at the same resolution)
+  const rank = s => ({ '4K': 0, '1080p': 1, '720p': 2 }[s.q] ?? 3) * 100 + ({ 'Dolby Vision': 0, 'HDR10+': 1, HDR: 2 }[s.h] ?? 3) * 10 + (s.a ? AUDIO_RANK.indexOf(s.a) : 7);
+  return lists.flat().sort((a, b) => rank(a) - rank(b) || b.gb - a.gb);
 }
 async function getSubtitles(type, imdb, season, episode) {
   const st = type === 'tv' ? 'series' : 'movie';
@@ -801,12 +894,15 @@ async function homeView(token) {
   let idx = -1;
   const show = i => {
     if (i === idx || !hero[i]) return; idx = i; const x = hero[i];
-    info.innerHTML = `<h1>${esc(titleOf(x))}</h1><div class="meta"><span class="badge acc">${T(x.media_type === 'tv' ? 'SERIES' : 'MOVIE')}</span>${yearOf(x) ? `<span>${yearOf(x)}</span>` : ''}${x.vote_average ? `<span>★ ${x.vote_average.toFixed(1)}</span>` : ''}</div>
+    info.innerHTML = `<div class="hero-logo" id="hero-logo"></div><div class="meta hero-meta"><span>${esc(metaLine(x))}</span>${x.vote_average ? `<span class="star">★ ${x.vote_average.toFixed(1)}</span>` : ''}</div>
       ${wide ? `<p class="dim" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(x.overview)}</p>` : ''}
       <div class="row-btns" style="justify-content:${wide ? 'flex-start' : 'center'}"><a class="btn white" href="#/details/${x.media_type}/${x.id}">${ic('play')}${T("Play")}</a><a class="btn tonal" href="#/details/${x.media_type}/${x.id}">${ic('info')}${T("Details")}</a></div>
       <div class="dots">${hero.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</div>`;
     info.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 350, easing: 'ease-out' });
+    // The title's own logo (held space while it's looked up, so the name never flashes first)
+    logoPath(x.media_type, x.id).then(path => { const box = $('#hero-logo'); if (box && idx === i) box.innerHTML = titleArt(path, titleOf(x)); });
   };
+  hero.forEach(x => logoPath(x.media_type, x.id));   // ready before their slide
   show(0);
   track.addEventListener('scroll', () => show(Math.round(track.scrollLeft / track.clientWidth)), { passive: true });
   const timer = setInterval(() => {
@@ -970,6 +1066,102 @@ function bindChannels(box, list) {
 }
 const tvTile = (c, i, href, label, emoji, scene, extra = '') => `<a class="tile genre tv" href="${href}" style="${tileStyle(c.c1, c.c2, i)}"><canvas data-scene="${scene}" data-i="${i}"></canvas>${extra}<span class="lbl"><b>${emoji} ${esc(label)}</b></span></a>`;
 
+// ---- Football: live scores, fixtures and results (ESPN's public scoreboard, same leagues as the apps)
+const LEAGUES = [['ksa.1', 'Saudi Pro League', 'دوري روشن السعودي'], ['afc.champions', 'AFC Champions League', 'دوري أبطال آسيا'], ['egy.1', 'Egyptian Premier League', 'الدوري المصري'],
+  ['uefa.champions', 'Champions League', 'دوري أبطال أوروبا'], ['eng.1', 'Premier League', 'الدوري الإنجليزي'], ['esp.1', 'LaLiga', 'الدوري الإسباني'], ['ita.1', 'Serie A', 'الدوري الإيطالي'],
+  ['ger.1', 'Bundesliga', 'الدوري الألماني'], ['fra.1', 'Ligue 1', 'الدوري الفرنسي'], ['uefa.europa', 'Europa League', 'الدوري الأوروبي'], ['uefa.europa.conf', 'Conference League', 'دوري المؤتمر الأوروبي'],
+  ['por.1', 'Liga Portugal', 'الدوري البرتغالي'], ['ned.1', 'Eredivisie', 'الدوري الهولندي'], ['tur.1', 'Süper Lig', 'الدوري التركي'], ['eng.fa', 'FA Cup', 'كأس الاتحاد الإنجليزي'],
+  ['eng.league_cup', 'Carabao Cup', 'كأس الرابطة الإنجليزية'], ['esp.copa_del_rey', 'Copa del Rey', 'كأس ملك إسبانيا'], ['ita.coppa_italia', 'Coppa Italia', 'كأس إيطاليا'],
+  ['ger.dfb_pokal', 'DFB-Pokal', 'كأس ألمانيا'], ['fifa.world', 'FIFA World Cup', 'كأس العالم'], ['fifa.worldq.afc', 'World Cup Qualifiers (Asia)', 'تصفيات كأس العالم – آسيا'],
+  ['fifa.worldq.uefa', 'World Cup Qualifiers (Europe)', 'تصفيات كأس العالم – أوروبا'], ['uefa.nations', 'UEFA Nations League', 'دوري الأمم الأوروبية'], ['fifa.cwc', 'FIFA Club World Cup', 'كأس العالم للأندية'],
+  ['fifa.friendly', 'International Friendlies', 'مباريات ودية دولية'], ['usa.1', 'MLS', 'الدوري الأمريكي']].map(([key, name, ar]) => ({ key, name, ar }));
+let matchCache = null;
+async function soccerMatches() {
+  if (matchCache && Date.now() - matchCache.t < 45000) return matchCache.v;
+  const now = Date.now(), from = now - 3 * 864e5, to = now + 7 * 864e5;
+  const months = [...new Set([from, now, to].map(t => new Date(t).toISOString().slice(0, 7).replace('-', '')))];
+  const side = o => { const t = o.team || {}; return { id: String(t.id || ''), name: t.displayName || t.name || '', short: t.shortDisplayName || t.abbreviation || '', logo: t.logo || t.logos?.[0]?.href || null, score: o.score ?? null, winner: !!o.winner }; };
+  const lists = await Promise.all(LEAGUES.flatMap(lg => months.map(m => getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.key}/scoreboard?dates=${m}`, 12000).then(j => (j.events || []).map(e => {
+    try {
+      const c = e.competitions[0], st = e.status || c.status, ty = st.type || {}, cs = c.competitors || [];
+      const home = cs.find(x => x.homeAway === 'home') || cs[0], away = cs.find(x => x.homeAway === 'away') || cs[1];
+      return { id: e.id, league: lg, start: Date.parse(e.date), state: ty.state, clock: st.displayClock || '', detail: ty.shortDetail || ty.detail || '',
+        home: side(home), away: side(away), tv: [...new Set((c.broadcasts || []).flatMap(b => b.names || []))] };
+    } catch { return null; }
+  }).filter(Boolean)).catch(() => []))));
+  const seen = new Set();
+  const v = lists.flat().filter(m => m.start >= from && m.start <= to && !seen.has(m.id) && seen.add(m.id)).sort((a, b) => a.start - b.start);
+  v.forEach(m => { m.live = m.state === 'in'; m.finished = m.state === 'post'; m.upcoming = m.state === 'pre' && !/postpon|cancel/i.test(m.detail); });
+  if (v.length) matchCache = { t: Date.now(), v };
+  return v;
+}
+function dayLabel(t) {
+  const d = new Date(t), key = x => x.toDateString(), today = new Date();
+  const shift = n => { const x = new Date(); x.setDate(x.getDate() + n); return key(x); };
+  return key(d) === key(today) ? T('Today') : key(d) === shift(1) ? T('Tomorrow') : key(d) === shift(-1) ? T('Yesterday')
+    : d.toLocaleDateString(S.lang === 'ar' ? 'ar' : undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+}
+const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+/** Square card like the X app: league on top, crests and score (or kick-off) in the middle, status below. */
+function matchCard(m) {
+  const crest = sd => `<span class="mc-team"><img src="${esc(sd.logo || '')}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b class="${sd.winner ? 'win' : ''}">${esc(sd.short || sd.name)}</b></span>`;
+  const mid = m.upcoming || m.home.score == null ? `<span class="mc-time">${hhmm(m.start)}</span>` : `<span class="mc-score">${esc(m.home.score)}-${esc(m.away.score)}</span>`;
+  const foot = m.live ? `<span class="mc-live"><i></i>${T('LIVE')} ${esc(m.clock || m.detail)}</span>` : m.finished ? `<span class="mc-ft">${esc(m.detail || 'FT')}</span>` : `<span class="mc-ft">${esc(dayLabel(m.start))}</span>`;
+  return `<button class="match ${m.live ? 'is-live' : ''}" data-mid="${esc(m.id)}"><span class="mc-lg">${esc(S.lang === 'ar' ? m.league.ar : m.league.name)}</span>
+    <span class="mc-mid">${crest(m.home)}${mid}${crest(m.away)}</span>${foot}</button>`;
+}
+/**
+ * Channels in your playlists that should be showing this match: the broadcasters the feed lists, plus the usual
+ * Arabic-region broadcaster of the competition (beIN SPORTS for the big European leagues, SSC / Thmanyah for the
+ * Saudi league …). Best first: the exact channel name, then 4K / FHD / HD.
+ */
+function channelsForMatch(m, channels) {
+  const norm = x => String(x).toLowerCase().replace(/sports/g, 'sport').replace(/[^\p{L}\p{N}]/gu, '');
+  const k = m.league.key;
+  const region = k === 'ksa.1' ? ['ssc', 'thmanyah', 'shahid'] : k === 'egy.1' ? ['ontime', 'on sport', 'ssc'] : k.startsWith('afc') || k.startsWith('fifa.worldq.afc') ? ['ssc', 'bein sport', 'alkass'] : k === 'tur.1' ? ['bein sport', 's sport'] : ['bein sport'];
+  const names = [...new Set([...m.tv, ...region].map(norm).filter(x => x.length >= 3))];
+  const teams = [m.home.name, m.away.name, m.home.short, m.away.short].map(norm).filter(x => x.length >= 4);
+  const seen = new Set();
+  return channels.map(ch => {
+    const n = norm(cleanName(ch.name)); let score = 0;
+    names.forEach((tv, i) => { const base = tv.replace(/\d+$/, ''); if (n.includes(tv)) score = Math.max(score, 30 - i); else if (base.length >= 3 && n.includes(base)) score = Math.max(score, 15 - i); });
+    if (teams.some(t => n.includes(t))) score += 20;
+    return score ? [ch, score * 10 + (/4k|uhd/.test(n) ? 4 : /fhd/.test(n) ? 3 : /hd/.test(n) ? 2 : 0) - (/sd/.test(n) ? 1 : 0)] : null;
+  }).filter(Boolean).sort((a, b) => b[1] - a[1]).map(x => x[0]).filter(ch => !seen.has(ch.url) && seen.add(ch.url)).slice(0, 24);
+}
+/** Tap a live / upcoming match → the channels airing it (best first). */
+async function watchMatch(m) {
+  sheet(m.home.name + ' vs ' + m.away.name, [{ t: 'Finding the channel…' }]);
+  const lists = await Promise.all([...(S.iptv || []).map(p => sourceChannels(p).catch(() => [])), freeChannels(TV_CATS.find(c => c.key === 'sports')).catch(() => [])]);
+  const all = lists.flat(), picks = channelsForMatch(m, all);
+  if (!$('.sheet')) return;
+  if (!picks.length) return sheet(m.home.name + ' vs ' + m.away.name, [{ t: 'No channel found for this match', s: m.tv.length ? `${T('Shown on')}: ${m.tv.join(', ')}` : 'Add your TV provider\'s playlist in Live TV → My playlists' }]);
+  if (picks.length === 1) { closeSheet(); return playChannel(picks, 0); }
+  sheet(m.home.name + ' vs ' + m.away.name, picks.map((ch, i) => ({ t: cleanName(ch.name), s: ch.groups[0] || '', icon: 'livetv', fn: () => playChannel(picks, i) })));
+}
+let soccerState = { filter: null, league: null };
+async function mountMatches(box) {
+  const draw = list => {
+    if (!box.isConnected) return;
+    const st = soccerState, filter = st.filter || (list.some(m => m.live) ? 'live' : 'upcoming');
+    const shown = list.filter(m => (!st.league || m.league.key === st.league) && (filter === 'live' ? m.live : filter === 'upcoming' ? m.upcoming : m.finished));
+    if (filter === 'results') shown.reverse();
+    const leagues = LEAGUES.filter(lg => list.some(m => m.league.key === lg.key)), live = list.filter(m => m.live).length;
+    box.innerHTML = `<div class="chips gutter" id="mf">${[['live', `🔴 ${T('Live')}${live ? ' ' + live : ''}`], ['upcoming', `🗓️ ${T('Upcoming')}`], ['results', `🏁 ${T('Results')}`]].map(([k, l]) => `<button class="chip ${filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
+      ${leagues.length > 1 ? `<div class="chips gutter" id="ml" style="padding-top:2px"><button class="chip sm ${!st.league ? 'on' : ''}" data-l="">${T('All competitions')}</button>${leagues.map(lg => `<button class="chip sm ${st.league === lg.key ? 'on' : ''}" data-l="${lg.key}">${esc(S.lang === 'ar' ? lg.ar : lg.name)}</button>`).join('')}</div>` : ''}
+      ${shown.length ? `<div class="rail gutter match-rail">${shown.slice(0, 60).map(matchCard).join('')}</div>`
+        : `<p class="gutter dim">${T(!list.length ? "Couldn't load the matches — check your internet connection." : filter === 'live' ? 'No matches are being played right now. See Upcoming.' : 'Nothing here for this competition.')}</p>`}`;
+    box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { st.filter = b.dataset.f; draw(list); });
+    box.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { st.league = b.dataset.l || null; draw(list); });
+    box.querySelectorAll('.match').forEach(b => b.onclick = () => { const m = list.find(x => x.id === b.dataset.mid); if (m && (m.live || m.upcoming)) watchMatch(m); });
+  };
+  box.innerHTML = `<div class="rail gutter match-rail">${'<div class="sk match"></div>'.repeat(6)}</div>`;
+  const list = await soccerMatches().catch(() => []);
+  draw(list);
+  // keep live scores fresh while you're on the page
+  const timer = setInterval(async () => { if (!box.isConnected) return clearInterval(timer); if (document.hidden) return; draw(await soccerMatches().catch(() => list)); }, list.some(m => m.live) ? 30000 : 120000);
+}
+
 /** Live TV tab: favourites, recently watched, countries (Kuwait first), categories and your playlists — all animated. */
 async function liveTvView(token) {
   const favs = (S.favs || []).map(savedToCh), recents = (S.recents || []).map(savedToCh), favSet = new Set((S.favs || []).map(x => x.url));
@@ -977,6 +1169,7 @@ async function liveTvView(token) {
   view.innerHTML = `<div class="sports-head tv-head"><div class="gutter"><h1>${ic('livetv')} ${T('Live TV')}</h1><p class="dim">${T('Free channels from the Gulf and the Arab world, plus your own playlists')}</p></div></div>
     ${favs.length ? sectionH('Favourites') + `<div class="rail gutter ch-rail" id="tv-fav">${favs.map((c, i) => chCard(c, i, favSet)).join('')}</div>` : ''}
     ${recents.length ? sectionH('Recently watched') + `<div class="rail gutter ch-rail" id="tv-rec">${recents.map((c, i) => chCard(c, i, favSet)).join('')}</div>` : ''}
+    ${sectionH('⚽ Matches', 'Live scores, fixtures and results — tap a match to watch it')}<div id="tv-matches"></div>
     ${sectionH('Countries', 'Free channels, streamed by the broadcasters themselves')}
     <div class="rail gutter">${TV_COUNTRIES.map((c, i) => tvTile(c, i, `#/tv/free/${c.key}`, T(c.name), c.emoji, 'tv_' + c.key)).join('')}</div>
     ${sectionH('Categories', 'Arabic and Gulf channels by type')}
@@ -986,6 +1179,7 @@ async function liveTvView(token) {
       `<span class="tile-x" data-del="${esc(p.id)}" title="${T('Remove')}">✕</span>`)).join('')}<button class="tile add-pl" id="add-pl">${ic('plus')}<b>${T('Add playlist')}</b><small class="dim">M3U · Xtream</small></button></div>
     <p class="gutter dim small-note">${T('Free channels come from iptv-org, an open list of streams the broadcasters publish themselves. Some may be offline or blocked outside their country.')}</p>`;
   view.querySelectorAll('canvas[data-scene]').forEach(c => window.GenreScenes && GenreScenes.attach(c, c.dataset.scene, +c.dataset.i));
+  mountMatches($('#tv-matches'));
   if (favs.length) bindChannels($('#tv-fav'), favs);
   if (recents.length) bindChannels($('#tv-rec'), recents);
   $('#add-pl').onclick = addPlaylistSheet;
@@ -1059,7 +1253,11 @@ function addPlaylistSheet() {
         else if (!(await sourceChannels(src)).length) throw new Error('That link has no channels');
       } catch (e) {
         if (browserBlocked(e)) note = 'Saved — this provider only works in the Lumio app (phone / TV)';
-        else { err.textContent = T(e.message || 'Network error'); go.disabled = false; go.textContent = T('Add'); return; }
+        else {
+          const m = /HTTP (52\d)/.exec(e.message || '');
+          err.textContent = m ? T(`This server address is up but your provider's server behind it isn't answering (HTTP ${m[1]}). If you have an M3U link that works, add that instead — Lumio reads it as Xtream, so movies, series and the TV guide still come with it.`) : T(e.message || 'Network error');
+          go.disabled = false; go.textContent = T('Add'); return;
+        }
       }
       S.iptv = [...(S.iptv || []), src]; saveSettings(); bg.remove(); toast(T(note)); route();
     };
@@ -1152,17 +1350,34 @@ async function detailsView(type, id, token) {
   const playLabel = resume ? (type === 'tv' ? `${T('Resume')} S${resume.season}E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season}E1` : T('Play');
   const playHref = type === 'tv' ? `#/streams/tv/${id}/${resume?.season || season}/${resume?.episode || 1}` : `#/streams/movie/${id}/-/-`;
   view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
-    <div class="backdrop">${img(d.backdrop_path && IMG + (wide ? 'original' : 'w1280') + d.backdrop_path)}
+    <div class="backdrop" id="d-top">${img(d.backdrop_path && IMG + (wide ? 'original' : 'w1280') + d.backdrop_path)}<div class="trailer-box" id="d-trailer"></div>
+      <button class="icon-btn mute-btn" id="d-mute" hidden aria-label="${T('Sound')}">${ic('volOff')}</button>
       <div class="d-info gutter"><div class="pst">${img(d.poster_path && IMG + 'w342' + d.poster_path)}</div>
-        <div style="min-width:0;max-width:640px"><h1>${esc(titleOf(d))}</h1>${d.tagline ? `<div class="tag">${esc(d.tagline)}</div>` : ''}
+        <div style="min-width:0;max-width:640px">${titleArt(pickLogo(d.images?.logos), titleOf(d), 'd-logo')}${d.tagline ? `<div class="tag">${esc(d.tagline)}</div>` : ''}
           <div class="meta">${yearOf(d) ? `<span class="badge">${yearOf(d)}</span>` : ''}${d.vote_average ? `<span class="badge">★ ${d.vote_average.toFixed(1)}</span>` : ''}${runtime ? `<span class="badge">${Math.floor(runtime / 60) ? Math.floor(runtime / 60) + 'h ' : ''}${runtime % 60}m</span>` : ''}${type === 'tv' ? `<span class="badge">${seasons.length} ${T("Seasons")}</span>` : ''}</div>
           <div class="genres">${esc((d.genres || []).map(g => g.name).join(' • '))}</div>
           <div class="row-btns"><a class="btn white" href="${playHref}">${ic('play')}${esc(playLabel)}</a>
-          <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button></div>
+          <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button>
+          ${bestTrailer(d.videos) ? `<button class="btn tonal" id="d-tr">${ic('movie')}${T('Trailer')}</button>` : ''}</div>
         </div></div></div>
     <p class="overview gutter">${esc(d.overview)}</p>
     ${type === 'tv' ? `<div class="chips gutter" id="seasons">${seasons.map(s => `<button class="chip ${s.season_number === season ? 'on' : ''}" data-n="${s.season_number}">${esc(s.name)}</button>`).join('')}</div><div class="eps gutter" id="eps"></div>` : ''}
     ${(d.credits?.cast || []).length ? `<div class="rail-title gutter">${T("Cast")}</div><div class="rail gutter">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" onclick="location.hash='#/person/${c.id}'">${c.profile_path ? `<img src="${IMG}w185${c.profile_path}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}`;
+  // The trailer starts by itself over the artwork (muted unless Settings → Appearance says sound; tap 🔇 for sound)
+  const trKey = bestTrailer(d.videos);
+  if (trKey) $('#d-tr').onclick = () => { detailTrailer?.stop(); $('#d-mute').hidden = true; trailerOverlay(trKey); };
+  let detailTrailer = null;
+  if (trKey && S.trailers !== 'off') setTimeout(() => {
+    const box = $('#d-trailer'); if (!box || token !== routeToken) return;
+    // Browsers only allow sound after you've clicked something on the page, which you have to get here
+    let muted = S.trailers === 'muted' || !navigator.userActivation?.hasBeenActive;
+    const mb = $('#d-mute');
+    detailTrailer = mountTrailer(box, trKey, { muted,
+      onPlay: () => { mb.hidden = false; box.classList.add('on'); },
+      onFail: () => { mb.hidden = true; }, onEnd: () => { mb.hidden = true; box.classList.remove('on'); detailTrailer?.stop(); } });
+    mb.innerHTML = ic(muted ? 'volOff' : 'volOn');
+    mb.onclick = () => { muted = !muted; detailTrailer.cmd(muted ? 'mute' : 'unMute'); if (!muted) detailTrailer.cmd('setVolume', [100]); mb.innerHTML = ic(muted ? 'volOff' : 'volOn'); };
+  }, 1200);
   $('#wl').onclick = () => {
     updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, { watch: !(cur && cur.watch) }));
     const on = libEntry(type, id)?.watch; $('#wl').innerHTML = ic(on ? 'bookmark' : 'bookmarkO'); toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
@@ -1190,13 +1405,15 @@ async function streamsView(type, id, season, episode, token) {
   const d = await api.details(type, id);
   if (token !== routeToken) return;
   const imdb = d.imdb_id || d.external_ids?.imdb_id;
+  const meta = [(d.genres || []).slice(0, 2).map(g => T(g.name)).join(' • '), yearOf(d)].filter(Boolean).join('  •  ');
+  // Premium two-pane (wide screens): the title's artwork and logo on the left, compact sources on the right
   view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
-    <div class="backdrop" style="height:220px">${img(d.backdrop_path && IMG + 'w1280' + d.backdrop_path)}
-      <div class="d-info gutter" style="bottom:12px"><div><h1 style="font-size:24px">${esc(titleOf(d))}</h1>${season != null ? `<div class="dim">${T('Season')} ${season} • ${T('Episode')} ${episode}</div>` : ''}</div></div></div>
-    <div class="gutter"><div class="row-btns" style="padding:8px 0 4px">
-      <button class="btn outline" id="purl">${ic('link')}${T("Play link")}</button>
-      <label class="btn outline" style="cursor:pointer">${ic('folder')}${T("Local file")}<input type="file" accept="video/*" id="pfile" hidden></label></div>
-      <div class="chips" id="sfil"></div><div class="list" id="slist">${Array.from({ length: 5 }, () => '<div class="sk" style="height:76px"></div>').join('')}</div></div>`;
+    <div class="src-page"><div class="src-bg">${img(d.backdrop_path && IMG + (innerWidth >= 900 ? 'original' : 'w1280') + d.backdrop_path)}</div>
+      <div class="src-head gutter">${titleArt(pickLogo(d.images?.logos), titleOf(d), 's-logo')}
+        ${meta ? `<div class="src-meta">${esc(meta)}</div>` : ''}${season != null ? `<div class="dim">${T('Season')} ${season} • ${T('Episode')} ${episode}</div>` : ''}
+        <div class="row-btns" style="padding-top:14px"><button class="btn outline" id="purl">${ic('link')}${T("Play link")}</button>
+          <label class="btn outline" style="cursor:pointer">${ic('folder')}${T("Local file")}<input type="file" accept="video/*" id="pfile" hidden></label></div></div>
+      <div class="src-list gutter"><div class="chips" id="sfil"></div><div class="list" id="slist">${Array.from({ length: 6 }, () => '<div class="sk" style="height:84px;border-radius:16px"></div>').join('')}</div></div></div>`;
   const play = (url, extra = {}) => startPlayer(Object.assign({ url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path }, extra));
   $('#purl').onclick = () => promptSheet('Play a link', 'https://…/video.m3u8 or .mp4', url => play(url));
   $('#pfile').onchange = e => { const f = e.target.files[0]; if (f) play(URL.createObjectURL(f), { title: f.name, local: true }); };
@@ -1207,16 +1424,25 @@ async function streamsView(type, id, season, episode, token) {
   if (!list.isConnected) return;
   if (!streams.length) { list.innerHTML = msg('No streams', 'Your addons returned no streams for this title.'); return; }
   let filter = 'All';
-  const filters = ['All', ...new Set(streams.map(s => s.addon)), ...new Set(streams.map(s => s.q).filter(Boolean))];
+  const filters = ['All', ...new Set(streams.map(s => s.addon)), ...new Set(streams.map(s => s.q).filter(Boolean)),
+    ...(streams.some(s => s.h === 'Dolby Vision') ? ['Dolby Vision'] : []), ...(streams.some(s => s.a === 'Dolby Atmos') ? ['Atmos'] : [])];
+  const tag = (t, cls = '') => `<span class="stag ${cls}">${esc(T(t))}</span>`;
+  const card = (s, i) => {
+    const n = srcInfo(s);
+    const line = [n.codec, n.channels && `${n.channels} ch`, n.multi && T('Multi audio'), n.seeds && `${n.seeds} ${T('seeds')}`].filter(Boolean).join('  ·  ');
+    const mkv = /\.(mkv|avi)(\?|$)/i.test(s.url) || /\bmkv\b/i.test(s.details);
+    return `<button class="source fly" style="animation-delay:${Math.min(i, 10) * 25}ms" data-i="${streams.indexOf(s)}">
+      <div class="s-top">${n.instant ? '<span class="s-bolt">⚡</span>' : ''}<span class="s-tags">${s.q ? tag(s.q, 'q') : ''}${s.h ? tag(s.h, 'hdr') : ''}${s.a ? tag(s.a, 'aud') : ''}${n.source ? tag(n.source, n.source === 'Remux' ? 'rmx' : '') : ''}</span>${n.size ? `<b class="s-size">${esc(n.size)}</b>` : ''}</div>
+      <div class="s-line"><span>${esc(line || s.label)}</span>${n.flags.length ? `<span class="s-flags">${n.flags.slice(0, 5).join(' ')}${n.flags.length > 5 ? ` +${n.flags.length - 5}` : ''}</span>` : ''}</div>
+      <div class="s-from">${esc([s.addon, n.site].filter(Boolean).join('  ·  '))}${n.file ? `<span>${esc(n.file)}</span>` : ''}</div>
+      ${mkv ? `<div class="warn">${T('MKV file: Safari may not play it. Use “Open in…” in the player for Infuse or VLC.')}</div>` : ''}</button>`;
+  };
   const draw = () => {
-    $('#sfil').innerHTML = filters.map(f => `<button class="chip sm ${f === filter ? 'on' : ''}">${esc(f)}</button>`).join('');
+    $('#sfil').innerHTML = filters.map(f => `<button class="chip sm ${f === filter ? 'on' : ''}">${esc(T(f))}</button>`).join('');
     $('#sfil').querySelectorAll('.chip').forEach((b, i) => b.onclick = () => { filter = filters[i]; draw(); });
-    const shown = streams.filter(s => filter === 'All' || s.addon === filter || s.q === filter);
-    list.innerHTML = shown.map((s, i) => `<button class="stream fly" style="animation-delay:${Math.min(i, 10) * 30}ms" data-i="${streams.indexOf(s)}">${ic('playC')}<div>
-      <div class="l">${s.q ? `<span class="badge acc">${s.q}</span>` : ''}${s.h ? `<span class="badge hdr">${s.h}</span>` : ''}<span>${esc(s.label)}</span></div>
-      ${s.details ? `<p>${esc(s.details)}</p>` : ''}<small>${esc(s.addon)}</small>
-      ${/\.(mkv|avi)(\?|$)/i.test(s.url) || /\bmkv\b/i.test(s.details) ? `<div class="warn">MKV file: Safari may not play it. Use “Open in…” in the player for Infuse or VLC.</div>` : ''}</div></button>`).join('');
-    list.querySelectorAll('.stream').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon }); });
+    const shown = streams.filter(s => filter === 'All' || (filter === 'Dolby Vision' ? s.h === filter : filter === 'Atmos' ? s.a === 'Dolby Atmos' : s.addon === filter || s.q === filter));
+    list.innerHTML = shown.map(card).join('');
+    list.querySelectorAll('.source').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon }); });
   };
   draw();
 }
@@ -1296,15 +1522,25 @@ function openPlayer() {
   if (PLAYER.el) closePlayer(true, true); // switching episode: progress already saved
   const r = PLAYER.req;
   const el = document.createElement('div'); el.className = 'player';
+  const live = r.type === 'live';
+  const zap = live && PLAYER.channels && PLAYER.channels.length > 1;
+  // Clean, Nuvio-style: back on the left and a few icons on the right; a small smoked-glass play button in the
+  // middle (a light ring turns around it while loading); title, guide line, seek bar and buttons along the bottom.
   el.innerHTML = `<video playsinline webkit-playsinline preload="auto" x-webkit-airplay="allow"></video>
     <div class="spinner" id="spin"></div>
     <div class="p-ui" id="pui">
-      <div class="p-top"><button class="icon-btn" id="pclose" aria-label="Close">${ic('back')}</button><div><b>${esc(r.title)}</b><small>${esc(r.subtitle || '')}</small></div>
-        ${r.id && !r.local && !r.live ? `<button class="icon-btn pparty" id="pparty" aria-label="${T('Watch party')}">${ic('group')}</button>` : ''}<button class="icon-btn" id="pair" aria-label="AirPlay">${ic('airplay')}</button><button class="icon-btn" id="ppip" aria-label="Picture in picture">${ic('pip')}</button></div>
-      <div class="p-mid"><button id="prew" aria-label="Back 10 seconds">${ic10('rew')}</button><button class="p-play" id="ppp" aria-label="Play or pause">${ic('play')}</button><button id="pfwd" aria-label="Forward 10 seconds">${ic10('fwd')}</button></div>
-      <div class="p-bot"><div class="p-time"><span id="tcur">0:00</span><div class="p-seek" id="seek"><div class="tr"><div class="buf" id="sbuf"></div><div class="cur" id="scur"></div></div><div class="th" id="sth"></div></div><span id="tleft">-0:00</span></div>
-        <div class="p-btns"><button id="bsub">${ic('subs')}<span>${T("Subtitles")}</span></button><button id="baud">${ic('audio')}<span>${T("Audio")}</span></button><button id="bspd">${ic('speed')}<span>${T("Speed")}</span></button>
-          <button id="bsize">${ic('aspect')}<span>${T("Size")}</span></button><button id="bscn">${ic('eyeOff')}<span>${T("Scenes")}</span></button><button id="bopen">${ic('open')}<span>${T("Open in…")}</span></button><button id="bfull">${ic('full')}<span>${T("Full screen")}</span></button></div></div>
+      <div class="p-top"><button class="p-ic" id="pclose" aria-label="${T('Back')}">${ic('back')}</button><span class="p-sp"></span>
+        ${r.id && !r.local && !live ? `<button class="p-ic pparty" id="pparty" aria-label="${T('Watch party')}">${ic('group')}</button>` : ''}<button class="p-ic" id="pair" aria-label="AirPlay">${ic('airplay')}</button><button class="p-ic" id="ppip" aria-label="Picture in picture">${ic('pip')}</button></div>
+      <div class="p-mid">${zap ? `<button class="p-ic big" id="prew" aria-label="${T('Previous channel')}">${ic('prevT')}</button>` : live ? '<span class="p-gap"></span>' : `<button class="p-ic big" id="prew" aria-label="Back 10 seconds">${ic10('rew')}</button>`}
+        <div class="p-pwrap"><button class="p-play" id="ppp" aria-label="Play or pause">${ic('play')}</button><i class="p-ring" id="pring"></i></div>
+        ${zap ? `<button class="p-ic big" id="pfwd" aria-label="${T('Next channel')}">${ic('next')}</button>` : live ? '<span class="p-gap"></span>' : `<button class="p-ic big" id="pfwd" aria-label="Forward 10 seconds">${ic10('fwd')}</button>`}</div>
+      <div class="p-bot">
+        <div class="p-title">${live ? `<span class="p-live">${T('LIVE')}</span>` : ''}<b>${esc(r.title)}</b></div>
+        <div class="p-meta" id="pmeta">${esc(r.subtitle || '')}</div><div class="p-next" id="pnext"></div>
+        ${live ? '<div class="p-prog" id="pprog" hidden><i></i></div>' : `<div class="p-seek" id="seek"><div class="tr"><div class="buf" id="sbuf"></div><div class="cur" id="scur"></div></div><div class="th" id="sth"></div></div>`}
+        <div class="p-row"><div class="p-btns"><button id="bsub">${ic('subs')}<span>${T("Subtitles")}</span></button><button id="baud">${ic('audio')}<span>${T("Audio")}</span></button>${live ? '' : `<button id="bspd">${ic('speed')}<span>${T("Speed")}</span></button>`}
+          <button id="bsize">${ic('aspect')}<span>${T("Size")}</span></button>${live ? '' : `<button id="bscn">${ic('eyeOff')}<span>${T("Scenes")}</span></button>`}<button id="bopen">${ic('open')}<span>${T("Open in…")}</span></button><button id="bfull">${ic('full')}<span>${T("Full screen")}</span></button></div>
+          <span class="p-clock" id="ptime">${live ? '' : '0:00 / 0:00'}</span></div></div>
     </div>`;
   document.body.appendChild(el); document.body.style.overflow = 'hidden';
   const v = $('video', el); PLAYER.el = el; PLAYER.v = v;
@@ -1338,16 +1574,20 @@ function openPlayer() {
   PLAYER.partyT = setInterval(() => { if (PLAYER.v === v) pSync(); }, 500);
   if (isCtl()) setTimeout(pPublish, 300);
   setTimeout(pRender, 0);
-  v.addEventListener('waiting', () => spin.hidden = false);
-  v.addEventListener('playing', () => spin.hidden = true);
-  v.addEventListener('canplay', () => spin.hidden = true);
+  const loading = on => { el.classList.toggle('loading', on); };
+  loading(true);
+  v.addEventListener('waiting', () => loading(true));
+  v.addEventListener('seeking', () => loading(true));
+  v.addEventListener('playing', () => loading(false));
+  v.addEventListener('canplay', () => { if (!v.paused || v.readyState >= 3) loading(false); });
+  v.addEventListener('pause', () => loading(false));
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', () => {
     const mkv = /\.(mkv|avi)(\?|$)/i.test(r.url);
     const box = document.createElement('div'); box.className = 'p-err';
     box.innerHTML = `<div><h3>Can't play this here</h3><p class="dim">${mkv ? "Safari can't play MKV files. Open it in Infuse or VLC instead (both free on the App Store)." : 'This source failed to load in Safari. Try another source, or open it in another player.'}</p>
       <div class="row-btns" style="justify-content:center"><button class="btn white" id="eopen">${ic('open')}${T("Open in…")}</button><button class="btn tonal" id="eclose">${T("Close")}</button></div></div>`;
-    el.appendChild(box); spin.hidden = true;
+    el.appendChild(box); loading(false);
     $('#eopen', box).onclick = openIn; $('#eclose', box).onclick = () => closePlayer();
   });
 
@@ -1355,14 +1595,15 @@ function openPlayer() {
   $('#pclose', el).onclick = () => closePlayer();
   $('#ppp', el).onclick = e => { e.stopPropagation(); v.paused ? v.play() : v.pause(); };
   const seekBy = s => { v.currentTime = Math.max(0, Math.min((v.duration || 0) - .5, v.currentTime + s)); flash(s); showUI(); };
-  $('#prew', el).onclick = e => { e.stopPropagation(); seekBy(-10); };
-  $('#pfwd', el).onclick = e => { e.stopPropagation(); seekBy(10); };
+  const zapBy = n => { const list = PLAYER.channels, i = (PLAYER.chIndex + n + list.length) % list.length; playChannel(list, i); };
+  $('#prew', el) && ($('#prew', el).onclick = e => { e.stopPropagation(); zap ? zapBy(-1) : seekBy(-10); });
+  $('#pfwd', el) && ($('#pfwd', el).onclick = e => { e.stopPropagation(); zap ? zapBy(1) : seekBy(10); });
   $('#pair', el).onclick = () => v.webkitShowPlaybackTargetPicker ? v.webkitShowPlaybackTargetPicker() : toast('AirPlay is available in Safari on iPhone');
   $('#ppip', el).onclick = async () => {
     try { if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture'); else if (document.pictureInPictureEnabled) await v.requestPictureInPicture(); else toast('Picture in Picture is not available here'); } catch { toast('Picture in Picture is not available here'); }
   };
   $('#bfull', el).onclick = () => { if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); else (el.requestFullscreen ? el.requestFullscreen() : null)?.catch?.(() => {}); };
-  $('#bspd', el).onclick = () => sheet('Playback speed', [.5, .75, 1, 1.25, 1.5, 1.75, 2].map(x => ({ t: x === 1 ? 'Normal' : x + 'x', on: v.playbackRate === x, fn: () => v.playbackRate = x })));
+  $('#bspd', el) && ($('#bspd', el).onclick = () => sheet('Playback speed', [.5, .75, 1, 1.25, 1.5, 1.75, 2].map(x => ({ t: x === 1 ? 'Normal' : x + 'x', on: v.playbackRate === x, fn: () => v.playbackRate = x }))));
   $('#bsize', el).onclick = () => sheet('Video size', [['Fit', 'Whole picture', ''], ['Zoom / Crop', 'Fills the screen', 'zoom'], ['Stretch', 'Fills screen, distorts picture', 'fill']].map(([t, s, c]) => ({ t, s, on: el.classList.contains(c) || (!c && !el.classList.contains('zoom') && !el.classList.contains('fill')), fn: () => { el.classList.remove('zoom', 'fill'); c && el.classList.add(c); } })));
   $('#baud', el).onclick = () => {
     const at = v.audioTracks;
@@ -1370,7 +1611,7 @@ function openPlayer() {
     sheet('Audio', Array.from(at).map((t, i) => ({ t: t.label || langName(t.language) || `Track ${i + 1}`, s: langName(t.language) || '', on: t.enabled, fn: () => { for (let j = 0; j < at.length; j++) at[j].enabled = j === i; } })));
   };
   $('#bsub', el).onclick = subtitlesSheet;
-  $('#bscn', el).onclick = scenesSheet;
+  $('#bscn', el) && ($('#bscn', el).onclick = scenesSheet);
   $('#bopen', el).onclick = openIn;
 
   function openIn() {
@@ -1386,6 +1627,7 @@ function openPlayer() {
 
   // ---- subtitles
   function addTrack(vttText, label, lang, select = true) {
+    if (!PLAYER.el || PLAYER.el !== el) return;
     const url = URL.createObjectURL(new Blob([vttText], { type: 'text/vtt' }));
     const tr = document.createElement('track'); tr.kind = 'subtitles'; tr.label = label; tr.srclang = lang || 'und'; tr.src = url;
     v.appendChild(tr);
@@ -1407,7 +1649,7 @@ function openPlayer() {
   async function onlineSubs() {
     sheet('Online subtitles', [{ t: 'Searching…' }]);
     const list = await getSubtitles(r.type, r.imdb, r.season, r.episode);
-    const pref = (S.subLang || 'en').slice(0, 2);
+    const pref = (S.subLang || 'ar').slice(0, 2);
     list.sort((a, b) => (String(b.lang).startsWith(pref) ? 1 : 0) - (String(a.lang).startsWith(pref) ? 1 : 0));
     if (!list.length) return sheet('Online subtitles', [{ t: 'No subtitles found', s: 'Install a subtitles addon in Settings' }]);
     sheet('Online subtitles', list.slice(0, 60).map((s, i) => ({ t: `${langName(s.lang) || s.lang} #${i + 1}`, s: s.id || '', fn: () => fetch(s.url).then(x => x.text()).then(t => addFromText(t, `${langName(s.lang) || s.lang} #${i + 1}`, s.lang)).catch(() => toast("Couldn't load that subtitle")) })));
@@ -1487,21 +1729,70 @@ function openPlayer() {
   }
 
   // ---- seek bar
+  const timeEl = $('#ptime', el);
+  if (live) {
+    const clock = () => { if (PLAYER.el !== el) return clearInterval(ct); timeEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+    const ct = setInterval(clock, 15000); clock();
+    liveGuide(r.url, el);
+  } else {
   const seek = $('#seek', el), scur = $('#scur', el), sbuf = $('#sbuf', el), sth = $('#sth', el);
   let scrubbing = false;
   const paint = frac => { scur.style.width = frac * 100 + '%'; sth.style.left = frac * 100 + '%'; };
   const tick = () => {
     if (!PLAYER.el || PLAYER.el !== el) return;
-    const d = v.duration || 0;
-    if (!scrubbing && d) { paint(v.currentTime / d); $('#tcur', el).textContent = fmt(v.currentTime * 1000); $('#tleft', el).textContent = '-' + fmt((d - v.currentTime) * 1000); }
+    const d = isFinite(v.duration) ? v.duration : 0;
+    if (!scrubbing && d) { paint(v.currentTime / d); timeEl.textContent = `${fmt(v.currentTime * 1000)} / ${fmt(d * 1000)}`; }
     if (d && v.buffered.length) sbuf.style.width = (v.buffered.end(v.buffered.length - 1) / d) * 100 + '%';
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
   const fracAt = e => { const b = seek.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); };
   seek.addEventListener('pointerdown', e => { e.stopPropagation(); scrubbing = true; seek.setPointerCapture(e.pointerId); paint(fracAt(e)); showUI(); });
-  seek.addEventListener('pointermove', e => { if (!scrubbing) return; const f = fracAt(e); paint(f); $('#tcur', el).textContent = fmt(f * v.duration * 1000); showUI(); });
+  seek.addEventListener('pointermove', e => { if (!scrubbing) return; const f = fracAt(e); paint(f); timeEl.textContent = `${fmt(f * v.duration * 1000)} / ${fmt(v.duration * 1000)}`; showUI(); });
   seek.addEventListener('pointerup', e => { if (!scrubbing) return; scrubbing = false; v.currentTime = fracAt(e) * (v.duration || 0); });
+  }
+
+  // ---- keyboard (computers, TV browsers): Space/K play, ←/→ ±10 s, ↑/↓ volume, M mute, F full screen,
+  // Esc / Back closes an open window in one press, otherwise leaves the player
+  const onKey = e => {
+    if (PLAYER.el !== el) return removeEventListener('keydown', onKey);
+    if (e.target.closest && e.target.closest('input, textarea, select')) return;
+    const k = e.key;
+    if (k === 'Escape' || k === 'GoBack' || k === 'BrowserBack') {
+      if ($('.sheet') || document.querySelector('.pop-bg')) { closeSheet(); closePop(); e.preventDefault(); return; }
+      if (document.fullscreenElement) return;
+      e.preventDefault(); closePlayer(); return;
+    }
+    if ($('.sheet')) return;
+    if (k === ' ' || k === 'k' || k === 'MediaPlayPause') { e.preventDefault(); v.paused ? v.play() : v.pause(); showUI(); }
+    else if (k === 'ArrowLeft' && !live) { e.preventDefault(); seekBy(-10); }
+    else if (k === 'ArrowRight' && !live) { e.preventDefault(); seekBy(10); }
+    else if ((k === 'ArrowLeft' || k === 'ChannelDown') && zap) { e.preventDefault(); zapBy(-1); }
+    else if ((k === 'ArrowRight' || k === 'ChannelUp') && zap) { e.preventDefault(); zapBy(1); }
+    else if (k === 'ArrowUp') { e.preventDefault(); v.volume = Math.min(1, v.volume + .1); v.muted = false; toast(`${T('Volume')} ${Math.round(v.volume * 100)}%`); }
+    else if (k === 'ArrowDown') { e.preventDefault(); v.volume = Math.max(0, v.volume - .1); toast(`${T('Volume')} ${Math.round(v.volume * 100)}%`); }
+    else if (k === 'm' || k === 'M') { v.muted = !v.muted; toast(v.muted ? 'Muted' : 'Sound on'); }
+    else if (k === 'f' || k === 'F') $('#bfull', el).click();
+    else showUI();
+  };
+  addEventListener('keydown', onKey);
+  el.addEventListener('mousemove', () => showUI());
+
+  // ---- Subtitles in your language, ready by themselves (Arabic by default — Settings → Subtitles)
+  if (!live) v.addEventListener('loadedmetadata', () => setTimeout(autoSubs, 400), { once: true });
+  async function autoSubs() {
+    const pref = (S.subLang || 'ar').slice(0, 2).toLowerCase();
+    const tt = Array.from(v.textTracks);
+    const own = tt.findIndex(t => langIs(t.language, pref));
+    if (own >= 0) { selectText(own); return; }
+    if (!r.imdb || tt.some(t => t.mode === 'showing')) return;
+    const list = (await getSubtitles(r.type, r.imdb, r.season, r.episode).catch(() => [])).filter(x => langIs(x.lang, pref));
+    for (const sub of list.slice(0, 3)) {
+      if (PLAYER.el !== el) return;
+      try { const text = await fetch(sub.url).then(x => { if (!x.ok) throw 0; return x.text(); }); if (text.length < 40) continue;
+        await addFromText(text, `${langName(pref) || pref} · ${T('auto')}`, pref); return; } catch { /* next one */ }
+    }
+  }
 
   // ---- tap / double-tap gestures
   let lastTap = 0, tapT;
@@ -1518,6 +1809,37 @@ function openPlayer() {
   }
   PLAYER.saveT = setInterval(saveProgress, 10000);
 }
+const LANG3 = { ar: ['ara'], en: ['eng'], fr: ['fre', 'fra'], es: ['spa'], de: ['ger', 'deu'], tr: ['tur'], it: ['ita'], pt: ['por', 'pob'], ru: ['rus'],
+  fa: ['per', 'fas'], ur: ['urd'], hi: ['hin'], ko: ['kor'], ja: ['jpn'], zh: ['chi', 'zho'], nl: ['dut', 'nld'], id: ['ind'], ms: ['may', 'msa'] };
+/** Is this track / subtitle language code (ar, ara, ar-SA, "Arabic"…) the language [p] (2 letters)? */
+const langIs = (c, p) => { c = String(c || '').toLowerCase(); return !!c && (c === p || c.startsWith(p + '-') || c.startsWith(p + '_') || (LANG3[p] || []).includes(c.slice(0, 3)) || c === String(langName(p) || '').toLowerCase()); };
+/** Live channel from an Xtream provider: what's on now and next (the provider's guide), refreshed every minute. */
+async function liveGuide(url, el) {
+  const m = String(url).match(/^(https?:\/\/[^/]+)\/live\/([^/]+)\/([^/]+)\/(\d+)/);
+  if (!m || (location.protocol === 'https:' && m[1].startsWith('http:'))) return;   // browsers block http:// from a secure page
+  const b64 = x => { try { return decodeURIComponent(escape(atob(x))); } catch { return x || ''; } };
+  const hm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  while (PLAYER.el === el) {
+    try {
+      const j = await getJSON(`${m[1]}/player_api.php?username=${m[2]}&password=${m[3]}&action=get_short_epg&stream_id=${m[4]}&limit=3`, 10000);
+      const list = (j.epg_listings || []).map(o => ({ title: b64(o.title), start: (+o.start_timestamp || Date.parse(o.start) / 1000) * 1000, end: (+o.stop_timestamp || Date.parse(o.end) / 1000) * 1000 }))
+        .filter(p => p.end > Date.now()).sort((a, b) => a.start - b.start);
+      const now = list[0], next = list[1];
+      if (PLAYER.el !== el || !now) return;
+      $('#pmeta', el).textContent = `${now.title}  ·  ${hm(now.start)}–${hm(now.end)}`;
+      $('#pnext', el).textContent = next ? `${T('Next')}  ${hm(next.start)}  ${next.title}` : '';
+      const bar = $('#pprog', el); bar.hidden = false; bar.firstElementChild.style.width = Math.max(0, Math.min(1, (Date.now() - now.start) / (now.end - now.start))) * 100 + '%';
+    } catch { return; }
+    await new Promise(res => setTimeout(res, 60000));
+  }
+}
+// Esc / a remote's Back closes the open window or pop-up in one press (the player handles its own)
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' && e.key !== 'GoBack' && e.key !== 'BrowserBack') return;
+  const tf = document.querySelector('.trailer-full'); if (tf) { tf.querySelector('.tf-x')?.click(); e.preventDefault(); return; }
+  if (PLAYER.el) return;
+  if ($('.sheet')) { closeSheet(); e.preventDefault(); } else if (document.querySelector('.pop-bg')) { closePop(); e.preventDefault(); }
+});
 function pickFile(accept, cb) { const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.onchange = () => i.files[0] && cb(i.files[0]); i.click(); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(); });
 addEventListener('pagehide', saveProgress);
@@ -2080,6 +2402,8 @@ function appearanceView() {
     <div class="card"><div class="set-row"><div><b>${T("AMOLED black")}</b><small>${T("Use pure black backgrounds for OLED screens")}</small></div>${sw('amoled', S.amoled)}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("Startup animation")}</b><small>${T("The wand writes the L when Lumio opens (any key or tap skips it)")}</small></div>${sw('apintro', S.intro !== false)}</div>
       ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; plays at your media volume and never over your music")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
+    <div class="card"><div class="set-row" style="display:block"><b>${T("Trailers")}</b><small class="dim">${T("Trailers play by themselves at the top of a title's page")}</small>
+      <div class="chips" style="padding-top:12px">${[['sound', 'With sound'], ['muted', 'Muted'], ['off', 'Off']].map(([k, n]) => `<button class="chip ${S.trailers === k ? 'on' : ''}" data-trl="${k}">${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Title colour")}</b><small class="dim">${T("Page titles and section headings")}</small>
       <div class="colors" style="padding-top:14px">${TITLES.map(([k, n, c]) => `<button class="dot ${S.titleColor === k ? 'on' : ''}" data-title="${k}"><i style="background:${c || 'var(--accent)'}">${ic('check')}</i>${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Arabic font")}</b><small class="dim">${T("Used when the app is in Arabic. Movie titles stay in English letters.")}</small>
@@ -2097,6 +2421,7 @@ function appearanceView() {
   $('#custc')?.addEventListener('input', e => { S.customAccent = e.target.value; saveSettings(); });
   $('#custc')?.addEventListener('change', () => appearanceView());
   view.querySelectorAll('[data-title]').forEach(b => b.onclick = () => set({ titleColor: b.dataset.title }));
+  view.querySelectorAll('[data-trl]').forEach(b => b.onclick = () => set({ trailers: b.dataset.trl }));
   view.querySelectorAll('[data-font]').forEach(b => b.onclick = () => set({ arabicFont: b.dataset.font }));
   view.querySelectorAll('[data-icon]').forEach(b => b.onclick = () => set({ iconColor: b.dataset.icon }));
 }
