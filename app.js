@@ -545,7 +545,7 @@ const progressOf = e => e && e.dur > 0 ? Math.min(1, e.pos / e.dur) : 0;
 /** The Lumio icon (gradient square + play mark) in one of the Appearance colours, as a PNG data URL. */
 /** The app icon in any colour: a soft pool of light on the icon colour + the wand writing the L (icons/mark.png). */
 const MARK_IMG = new Image();
-MARK_IMG.onload = () => { applyTheme(); if (document.querySelector('.ap-icons')) appearanceView(); };
+MARK_IMG.onload = () => { applyTheme(); if (document.querySelector('.ap-icons')) appearanceView(); document.querySelectorAll('.lmark').forEach(i => { i.src = iconURL((typeof S !== 'undefined' && S && S.iconColor) || 'midnight', 128); }); };
 MARK_IMG.src = 'icons/mark.png';
 function mixHex(a, b, t) {
   const pa = [1, 3, 5].map(i => parseInt(a.substr(i, 2), 16)), pb = [1, 3, 5].map(i => parseInt(b.substr(i, 2), 16));
@@ -2019,7 +2019,8 @@ const profilePinHash = async (id, pin) => {
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 };
 let PROFILE_CHOSEN = false;
-function lumioLogo() { return `<div class="logo-row"><span class="olive-logo">${ic('play')}</span><b>Lumio</b></div>`; }
+/** Lumio's mark, the same as the apps: the icon (in your icon colour) and the name in the startup animation's serif, side by side. */
+function lumioLogo() { return `<div class="logo-row"><img class="lmark" src="${iconURL((typeof S !== 'undefined' && S && S.iconColor) || 'midnight', 128)}" alt=""><b class="lword">Lumio</b></div>`; }
 
 // ---- login (email + password, same account as the Android app)
 async function loginView() {

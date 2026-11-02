@@ -514,8 +514,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .wnote { font-size: 11px; }
 
 /* ---------------- Olive logo, login extras */
-.logo-row { display: flex; align-items: center; gap: 12px; justify-content: center; }
-.logo-row b { font: 800 32px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; letter-spacing: -.5px; color: #fff; }
+@font-face { font-family: "Lumio Serif"; src: url("fonts/LumioSerif-logo.otf") format("opentype"); font-display: block; }
+.logo-row { display: flex; flex-direction: row; align-items: center; gap: 16px; justify-content: center; direction: ltr; margin-bottom: 6px; }
+.logo-row .lmark { width: 64px; height: 64px; border-radius: 17px; box-shadow: 0 10px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(255,224,138,.16); animation: glow 3.6s ease-in-out infinite; flex: 0 0 auto; }
+.logo-row b, .logo-row .lword { font: 400 52px/1 "Lumio Serif", Georgia, "Times New Roman", serif; letter-spacing: 1px; color: #FFF3D6; text-shadow: 0 0 18px rgba(255,214,120,.4); }
+@media (max-width: 420px) { .logo-row .lmark { width: 54px; height: 54px; border-radius: 14px; } .logo-row b, .logo-row .lword { font-size: 44px; } }
 .olive-logo { width: 56px; height: 56px; border-radius: 17px; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #3A3B4E, #0B0B0F 75%); box-shadow: 0 10px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(255,224,138,.18); animation: glow 3s ease-in-out infinite; }
 .olive-logo svg { width: 34px; height: 34px; }
 .btn.olive { background: #7A8B2F; color: #fff; }
