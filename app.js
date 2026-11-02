@@ -457,6 +457,15 @@ function mergeCD(remote, local) {
         out[k] = JSON.stringify(o);
       } else if (k.startsWith('settings')) {   // cloud wins, but keep every addon from every device
         const r = JSON.parse(rv), l = JSON.parse(lv);
+        // provider "Recently watched": newest copy per title from either side, minus titles removed after they were watched
+        const hid = Object.assign({}, r.hiddenVod || {});
+        for (const [key, t] of Object.entries(l.hiddenVod || {})) hid[key] = Math.max(hid[key] || 0, t);
+        if (Object.keys(hid).length || l.recentVod) {
+          const vk = v => `${v.src}:${v.kind}:${v.id}`, m = new Map();
+          for (const v of (r.recentVod || []).concat(l.recentVod || [])) { const c = m.get(vk(v)); if (!c || (v.at || 0) > (c.at || 0)) m.set(vk(v), v); }
+          r.recentVod = [...m.values()].filter(v => (hid[vk(v)] ?? -1) < (v.at || 0)).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
+          r.hiddenVod = hid; out[k] = JSON.stringify(r);
+        }
         const ra = Array.isArray(r.addons) ? r.addons : [], la = Array.isArray(l.addons) ? l.addons : [];
         const extra = la.filter(a => !ra.some(x => x.manifestUrl === a.manifestUrl));
         if (extra.length) { r.addons = ra.concat(extra); out[k] = JSON.stringify(r); }
@@ -1945,7 +1954,7 @@ function openPosterMenu(p) {
       { icon: 'play', t: 'Continue watching', s: e.season != null ? `S${e.season} • E${e.episode}` : '', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), false)) },
       { icon: 'replay', t: 'Play from beginning', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), true)) },
       { icon: 'remove', t: 'Remove from Continue Watching', fn: () => unlockThen(type, id, title, () => {
-        updateLib(type, id, cur => { const n = Object.assign(cur, { pos: 0, dur: 0 }); return n.watch || n.watched || n.pin ? n : null; });
+        updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0 }));   // kept, cleared and newer — a deleted one came back from other devices' copy
         document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`).forEach(x => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } });
         toast('Removed from Continue Watching');
       }) },
