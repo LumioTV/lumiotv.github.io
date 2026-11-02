@@ -889,5 +889,14 @@ window.LUMIO_AR = {
 "Soap": "مسلسل طويل",
 "Talk": "حواري",
 "Removed from Favourites": "أُزيلت من المفضلة",
-"Added to Favourites": "أُضيفت إلى المفضلة"
+"Added to Favourites": "أُضيفت إلى المفضلة",
+"Next episode": "الحلقة التالية",
+"Next in": "التالية خلال",
+"Play now": "شغّل الآن",
+"The next episode isn't out yet": "الحلقة التالية لم تُعرض بعد",
+"Comes out": "تُعرض",
+"No release date yet": "لا يوجد موعد عرض بعد",
+"Want a reminder when it comes out?": "هل تريد تذكيرًا عند عرضها؟",
+"Not now": "ليس الآن",
+"We'll let you know when it's out": "سنخبرك عند عرضها"
 };

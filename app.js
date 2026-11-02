@@ -357,11 +357,11 @@ function toApp(w, base) {
 // ---- library entries: app format ↔ web
 const fromEntry = e => ({ type: e.type, id: e.tmdbId, title: e.title || '', poster: e.posterPath || null, backdrop: e.backdropPath || null, watch: !!e.inWatchlist,
   pos: e.positionMs || 0, dur: e.durationMs || 0, season: e.season ?? null, episode: e.episode ?? null, url: e.lastStreamUrl || null, imdb: e.imdbId || null,
-  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0 });
+  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [] });
 const toEntry = x => ({ tmdbId: x.id, type: x.type, title: x.title || '', posterPath: x.poster || null, backdropPath: x.backdrop || null, inWatchlist: !!x.watch,
   positionMs: Math.round(x.pos || 0), durationMs: Math.round(x.dur || 0), season: x.season ?? null, episode: x.episode ?? null,
   lastStreamUrl: x.url && !String(x.url).startsWith('blob:') ? x.url : null, imdbId: x.imdb || null, addonName: x.addon || null,
-  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now() });
+  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [] });
 
 const DEFAULT_SETTINGS = fromApp({});
 let S, LIB;
@@ -446,7 +446,9 @@ function mergeCD(remote, local) {
         out[k] = JSON.stringify(r.concat(l.filter(p => !r.some(x => x.id === p.id))));
       } else if (k.startsWith('library')) {
         const m = new Map();
-        for (const e of JSON.parse(rv).concat(JSON.parse(lv))) { const id = e.type + '-' + e.tmdbId, c = m.get(id); if (!c || (e.updatedAt || 0) > (c.updatedAt || 0)) m.set(id, e); }
+        const eps = new Map();
+        for (const e of JSON.parse(rv).concat(JSON.parse(lv))) { const id = e.type + '-' + e.tmdbId, c = m.get(id); eps.set(id, [...new Set([...(eps.get(id) || []), ...(e.watchedEps || [])])]); if (!c || (e.updatedAt || 0) > (c.updatedAt || 0)) m.set(id, e); }
+        for (const [id, e] of m) if ((eps.get(id) || []).length) e.watchedEps = eps.get(id);
         out[k] = JSON.stringify([...m.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 500));
       } else if (k.startsWith('scene_filters')) {
         const r = JSON.parse(rv), l = JSON.parse(lv), o = {};
@@ -1415,8 +1417,9 @@ async function detailsView(type, id, token) {
       if (!box.isConnected || season !== n) return;
       const le = libEntry(type, id);
       box.innerHTML = eps.map((ep, i) => {
-        const p = le && le.season === ep.season_number && le.episode === ep.episode_number ? progressOf(le) : 0;
-        return `<a class="ep fly" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${img(ep.still_path && IMG + 'w300' + ep.still_path)}${p ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p>${esc(ep.overview || '')}</p></div></a>`;
+        const cur = le && le.season === ep.season_number && le.episode === ep.episode_number, p = cur ? progressOf(le) : 0;
+        const seen = (le?.eps || []).includes(`${ep.season_number}:${ep.episode_number}`);
+        return `<a class="ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && p < .92 ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${cur && !seen ? `<small class="ep-here">${T('Continue')}</small>` : ''}${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p>${esc(ep.overview || '')}</p></div></a>`;
       }).join('');
     };
     view.querySelectorAll('#seasons .chip').forEach(c => c.onclick = () => showSeason(+c.dataset.n));
@@ -1541,7 +1544,13 @@ function closePlayer(fromRoute, skipSave) {
 }
 function saveProgress() {
   const r = PLAYER.req, v = PLAYER.v; if (!r || !v || !r.id || r.local || !isFinite(v.duration) || !v.duration) return;
-  updateLib(r.type, r.id, cur => Object.assign(cur || { type: r.type, id: r.id, title: r.title, poster: r.poster, backdrop: r.backdrop }, { pos: v.currentTime * 1000, dur: v.duration * 1000, season: r.season, episode: r.episode, url: r.url, imdb: r.imdb || (cur && cur.imdb), addon: r.addon || (cur && cur.addon) }));
+  const done = v.currentTime / v.duration >= .92;   // into the credits → watched
+  updateLib(r.type, r.id, cur => {
+    const e = Object.assign(cur || { type: r.type, id: r.id, title: r.title, poster: r.poster, backdrop: r.backdrop }, { pos: v.currentTime * 1000, dur: v.duration * 1000, season: r.season, episode: r.episode, url: r.url, imdb: r.imdb || (cur && cur.imdb), addon: r.addon || (cur && cur.addon) });
+    if (done && r.type === 'movie') e.watched = true;
+    if (done && r.season != null) e.eps = [...new Set([...(e.eps || []), `${r.season}:${r.episode}`])];
+    return e;
+  });
 }
 function openPlayer() {
   if (PLAYER.el) closePlayer(true, true); // switching episode: progress already saved
