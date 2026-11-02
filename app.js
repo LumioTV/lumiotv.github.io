@@ -357,11 +357,11 @@ function toApp(w, base) {
 // ---- library entries: app format ↔ web
 const fromEntry = e => ({ type: e.type, id: e.tmdbId, title: e.title || '', poster: e.posterPath || null, backdrop: e.backdropPath || null, watch: !!e.inWatchlist,
   pos: e.positionMs || 0, dur: e.durationMs || 0, season: e.season ?? null, episode: e.episode ?? null, url: e.lastStreamUrl || null, imdb: e.imdbId || null,
-  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [] });
+  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode });
 const toEntry = x => ({ tmdbId: x.id, type: x.type, title: x.title || '', posterPath: x.poster || null, backdropPath: x.backdrop || null, inWatchlist: !!x.watch,
   positionMs: Math.round(x.pos || 0), durationMs: Math.round(x.dur || 0), season: x.season ?? null, episode: x.episode ?? null,
   lastStreamUrl: x.url && !String(x.url).startsWith('blob:') ? x.url : null, imdbId: x.imdb || null, addonName: x.addon || null,
-  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [] });
+  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp });
 
 const DEFAULT_SETTINGS = fromApp({});
 let S, LIB;
@@ -539,7 +539,7 @@ function updateLib(type, id, fn) {
   if (next) LIB.unshift(Object.assign(next, { updatedAt: Date.now() }));
   saveLib();
 }
-const isContinue = e => e && e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95;
+const isContinue = e => e && ((e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95) || e.newEp);   // newEp: a new episode of a show you'd caught up on
 const progressOf = e => e && e.dur > 0 ? Math.min(1, e.pos / e.dur) : 0;
 
 /** The Lumio icon (gradient square + play mark) in one of the Appearance colours, as a PNG data URL. */
@@ -1549,6 +1549,7 @@ function saveProgress() {
     const e = Object.assign(cur || { type: r.type, id: r.id, title: r.title, poster: r.poster, backdrop: r.backdrop }, { pos: v.currentTime * 1000, dur: v.duration * 1000, season: r.season, episode: r.episode, url: r.url, imdb: r.imdb || (cur && cur.imdb), addon: r.addon || (cur && cur.addon) });
     if (done && r.type === 'movie') e.watched = true;
     if (done && r.season != null) e.eps = [...new Set([...(e.eps || []), `${r.season}:${r.episode}`])];
+    e.newEp = false;
     return e;
   });
 }
