@@ -887,3 +887,61 @@ img.kb.ok { opacity: 1; }
 .ep.cur { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); }
 .ep .ep-here { display: inline-block; margin-inline-end: 8px; padding: 1px 7px; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 700; }
 @keyframes tickIn { from { transform: scale(.2); opacity: 0; } }
+
+/* Age rating: outlined like a cinema ticket; in the player, top-left for a few seconds */
+.badge.age { background: transparent; border: 1.5px solid rgba(255,255,255,.7); font-weight: 800; }
+.p-adv { position: absolute; z-index: 4; top: calc(76px + var(--safe-t)); inset-inline-start: max(24px, var(--safe-l)); display: flex; gap: 12px; align-items: stretch; pointer-events: none; animation: advIn .6s ease-out both; transition: opacity .8s; text-shadow: 0 1px 8px rgba(0,0,0,.85); }
+.p-adv.out { opacity: 0; }
+.p-adv i { width: 3px; border-radius: 2px; background: var(--accent); }
+.p-adv b { display: block; font-size: 20px; }
+.p-adv span { display: block; font-size: 14px; color: rgba(255,255,255,.88); }
+@keyframes advIn { from { opacity: 0; transform: translateX(-16px); } }
+
+/* Profile tab (your picture) and the profile page header (Nuvio-style) */
+.nav-me .av { border-radius: 8px !important; box-shadow: 0 0 0 1.5px rgba(255,255,255,.35); }
+.nav-item.on.nav-me .av { box-shadow: 0 0 0 2px #fff; }
+.me-head { display: grid; justify-items: center; gap: 4px; padding-top: calc(28px + var(--safe-t)); padding-bottom: 8px; text-align: center; }
+.me-head .me-av { padding: 5px; border-radius: 30px; border: 2.5px solid transparent; background: linear-gradient(var(--bg), var(--bg)) padding-box, linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)) border-box; margin-bottom: 8px; }
+.me-head h1 { font-size: 24px; }
+.me-head .row-btns { justify-content: center; margin-top: 10px; }
+/* Play straight away */
+.qp { position: fixed; z-index: 140; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 12px 10px 12px 18px; border-radius: 22px;
+  background: linear-gradient(rgba(38,38,50,.92), rgba(14,14,20,.95)); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 16px 40px rgba(0,0,0,.6); animation: up .3s cubic-bezier(.2,.9,.3,1); max-width: calc(100vw - 32px); }
+.qp b { display: block; font-size: 15px; } .qp small { display: block; font-size: 12px; color: rgba(255,255,255,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+.qp button { padding: 8px 12px; border-radius: 14px; color: rgba(255,255,255,.8); }
+/* Flying star / heart and the little burst where it lands */
+.fly-fx { position: fixed; left: 0; top: 0; z-index: 200; font-size: 26px; line-height: 30px; width: 30px; text-align: center; pointer-events: none; text-shadow: 0 4px 12px rgba(0,0,0,.5); }
+.burst-fx { position: fixed; z-index: 200; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 3px solid currentColor; pointer-events: none; animation: burst .45s ease-out forwards; }
+@keyframes burst { to { transform: scale(4); opacity: 0; border-width: .5px; } }
+/* Dust when a poster is removed */
+.dust-fx { position: fixed; z-index: 150; pointer-events: none; }
+.dust-fx i { position: absolute; border-radius: 1px; }
+/* Hover trailer card (computers) */
+.pv-pop { position: fixed; z-index: 90; border-radius: 14px; overflow: hidden; background: var(--s2); box-shadow: 0 20px 50px rgba(0,0,0,.65), 0 0 0 2px rgba(255,255,255,.85); animation: pvIn .32s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pvIn { from { transform: scaleX(.4); opacity: 0; } }
+.pv-pop .pv-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pv-pop .pv-shade { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,.8)); }
+.pv-pop .pv-logo { position: absolute; left: 14px; bottom: 12px; width: 55%; }
+.pv-pop .pv-l.tlogo { max-height: 56px; } .pv-pop .pv-l.tlogo-txt { font-size: 18px; }
+/* Up next (glass card) and "not out yet" */
+.glass { background: linear-gradient(rgba(38,38,50,.88), rgba(18,18,25,.92) 60%, rgba(11,11,16,.95)); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 24px 60px rgba(0,0,0,.6); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+.upnext { position: absolute; z-index: 6; right: max(24px, var(--safe-r)); bottom: calc(34px + var(--safe-b)); display: flex; gap: 14px; align-items: center; padding: 12px; border-radius: 22px; width: min(460px, calc(100vw - 32px)); animation: unIn .45s cubic-bezier(.2,.9,.3,1) both; }
+.p-ui:not(.off) ~ .upnext { bottom: calc(150px + var(--safe-b)); }
+@keyframes unIn { from { opacity: 0; transform: translateX(40%) scale(.94); } }
+.un-pic { position: relative; flex: 0 0 auto; width: 160px; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: var(--s2); }
+.un-pic img { width: 100%; height: 100%; object-fit: cover; }
+.un-pic span { position: absolute; left: 7px; bottom: 7px; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.6); }
+.un-txt { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.un-l { color: var(--accent); font-weight: 800; font-size: 12px; }
+.un-txt b { font-size: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.un-btns { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.un-play { position: relative; overflow: hidden; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: 20px; background: rgba(255,255,255,.16); font-weight: 700; }
+.un-play i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); }
+.un-play svg, .un-play span { position: relative; } .un-play svg { width: 20px; height: 20px; }
+.un-x { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; } .un-x:hover, .un-play:hover { outline: 2px solid #fff; }
+.un-x svg { width: 20px; height: 20px; }
+@media (max-width: 520px) { .un-pic { width: 112px; } }
+.notyet { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 40px)); padding: 24px 26px; border-radius: 26px; display: grid; justify-items: center; gap: 6px; text-align: center; animation: fade .4s; }
+.notyet .ny-ic { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 22%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); margin-bottom: 8px; }
+.notyet .ny-ic svg { width: 28px; height: 28px; }
+.notyet b { font-size: 20px; } .notyet small { color: rgba(255,255,255,.75); } .notyet em { font-style: normal; color: var(--accent); font-weight: 600; margin-bottom: 12px; }

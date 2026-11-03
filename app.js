@@ -271,6 +271,7 @@ const P = {
   volOn: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z',
   volOff: 'M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z',
   prevT: 'M6 6h2v12H6zm3.5 6l8.5 6V6z',
+  cal: 'M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z',
   lang: 'M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z',
 };
 const ic = (name, extra = '') => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" ${extra}><path d="${P[name]}"/></svg>`;
@@ -654,6 +655,31 @@ function logoPath(type, id) {
   if (!logoCache.has(k)) logoCache.set(k, tmdb(`${type}/${id}/images?include_image_language=ar,en,null`).then(r => pickLogo(r.logos)).catch(() => null));
   return logoCache.get(k);
 }
+/** Age rating (your region, else US / UK / …) and what the title contains, from TMDB — same rules as the apps. */
+const AGE_RULES = [['Violence', ['violen', 'violên', 'gewalt', 'fight', 'brutal', 'murder', 'killing']], ['Blood & gore', ['gore', 'blood', 'sangue', 'sangre', 'gory', 'splatter', 'dismember']],
+  ['Bad language', ['language', 'linguagem', 'lenguaje', 'profan', 'swear', 'coarse', 'obscen', 'crude']], ['Drugs', ['drug', 'droga', 'drogen', 'narcot', 'cocaine', 'heroin', 'marijuana', 'meth']],
+  ['Sex', ['sex', 'sexo', 'erotic']], ['Nudity', ['nud', 'naked', 'nackt']], ['Alcohol & smoking', ['alcohol', 'álcool', 'drunk', 'smok', 'tobacco', 'tabaco']],
+  ['Frightening scenes', ['horror', 'frighten', 'terror', 'medo', 'scary', 'disturbing', 'threat']], ['Self-harm', ['suicid', 'self-harm', 'self harm']]];
+const ageCache = new Map();
+function ageRating(type, id) {
+  const k = `${type}-${id}-${S.region}`;
+  if (!ageCache.has(k)) ageCache.set(k, (async () => {
+    const certs = {}, notes = [];
+    try {
+      const r = await tmdb(type === 'tv' ? `tv/${id}/content_ratings` : `movie/${id}/release_dates`);
+      for (const c of r.results || []) {
+        if (type === 'tv') { if (c.rating && !certs[c.iso_3166_1]) certs[c.iso_3166_1] = c.rating; notes.push(...(c.descriptors || [])); }
+        else for (const d of (c.release_dates || []).slice().sort((a, b) => (a.type === 3 ? 0 : 1) - (b.type === 3 ? 0 : 1))) { if (d.certification && !certs[c.iso_3166_1]) certs[c.iso_3166_1] = d.certification; notes.push(...(d.descriptors || [])); }
+      }
+    } catch { /* none */ }
+    try { const kw = await tmdb(`${type}/${id}/keywords`); for (const x of kw.keywords || kw.results || []) notes.push(x.name); } catch { /* none */ }
+    const raw = ([(S.region || 'US').toUpperCase(), 'US', 'GB', 'CA', 'AU', 'IE', 'DE', 'NL', 'FR'].map(c => certs[c]).find(Boolean) || Object.values(certs)[0] || '').trim();
+    const label = /^\d{1,2}$/.test(raw) ? raw + '+' : raw, text = notes.map(n => String(n).toLowerCase());
+    const adv = AGE_RULES.filter(([, ws]) => text.some(n => ws.some(w => n.includes(w)))).map(x => x[0]).slice(0, 6);
+    return label || adv.length ? { label, adv } : null;
+  })());
+  return ageCache.get(k);
+}
 /** Official trailer → teaser → anything, on YouTube. */
 function bestTrailer(videos) {
   const rank = v => ({ Trailer: 0, Teaser: 1 }[v.type] ?? 2) * 4 + (v.official ? 0 : 2) + (v.iso_639_1 === 'en' ? 0 : 1);
@@ -747,6 +773,34 @@ async function fetchManifest(url) {
 }
 const quality = s => { s = s.toUpperCase(); return /2160|4K|UHD/.test(s) ? '4K' : /1080/.test(s) ? '1080p' : /720/.test(s) ? '720p' : ''; };
 const hdr = s => { s = s.toUpperCase(); return /DOLBY VISION|\bDV\b|DOVI/.test(s) ? 'Dolby Vision' : /HDR10\+/.test(s) ? 'HDR10+' : /HDR/.test(s) ? 'HDR' : ''; };
+/**
+ * Best stream first (same rules as the apps): the title's original sound — never a dubbed-only copy (Polish lektor,
+ * Italian, French VFF, Latino …) — then instant (cached) streams, the sharpest picture, the best sound, the bigger file.
+ */
+const LANG_WORDS = { en: ['ENG', 'ENGLISH'], pl: ['PL', 'POL', 'POLISH', 'LEKTOR', 'NAPISY'], it: ['ITA', 'ITALIAN'], fr: ['FRENCH', 'TRUEFRENCH', 'VFF', 'VFQ', 'VF2', 'VFI', 'VF', 'FRE'],
+  es: ['SPANISH', 'ESP', 'CASTELLANO', 'LATINO', 'LAT', 'SPA'], de: ['GERMAN', 'GER', 'DEUTSCH'], ru: ['RUS', 'RUSSIAN'], uk: ['UKR', 'UKRAINIAN'], pt: ['POR', 'PORTUGUESE', 'DUBLADO', 'PT-BR'],
+  hi: ['HINDI', 'HIN'], ta: ['TAMIL', 'TAM'], te: ['TELUGU', 'TEL'], tr: ['TURKISH', 'TUR'], cs: ['CZ', 'CZECH'], hu: ['HUN', 'HUNGARIAN'], ar: ['ARABIC', 'ARA'], ja: ['JAP', 'JAPANESE', 'JPN'], ko: ['KOR', 'KOREAN'], zh: ['CHI', 'CHINESE', 'MANDARIN'] };
+const FLAG_LANG = { '🇬🇧': 'en', '🇺🇸': 'en', '🇵🇱': 'pl', '🇮🇹': 'it', '🇫🇷': 'fr', '🇪🇸': 'es', '🇲🇽': 'es', '🇩🇪': 'de', '🇷🇺': 'ru', '🇺🇦': 'uk', '🇵🇹': 'pt', '🇧🇷': 'pt', '🇮🇳': 'hi', '🇹🇷': 'tr', '🇨🇿': 'cs', '🇭🇺': 'hu', '🇸🇦': 'ar', '🇪🇬': 'ar', '🇯🇵': 'ja', '🇰🇷': 'ko', '🇨🇳': 'zh', '🇹🇼': 'zh' };
+function streamScore(s, orig) {
+  const text = (s.label + ' ' + s.details), up = text.toUpperCase(), words = new Set(up.split(/[^A-Z0-9-]+/));
+  const langs = new Set(Object.entries(LANG_WORDS).filter(([, ws]) => ws.some(w => words.has(w))).map(([l]) => l));
+  for (const f of text.match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu) || []) if (FLAG_LANG[f]) langs.add(FLAG_LANG[f]);
+  const multi = /\b(MULTI|DUAL)\b/.test(up), o = (orig || 'en').toLowerCase();
+  let sc = 0;
+  if (langs.size && !langs.has(o) && !langs.has('en') && !multi) sc -= 2000;
+  if (/\b(DUB|DUBBED|DUBBING|DUBLADO|LEKTOR)\b/.test(up) && !langs.has(o) && !multi) sc -= 600;
+  if (/\[(RD|TB|AD|PM|DL|ED|OC|PK)\+]/.test(s.label) || s.label.includes('⚡')) sc += 400;
+  sc += { '4K': 260, '1080p': 200, '720p': 110 }[s.q] ?? 70;
+  if (/\b(CAM|HDCAM|TS|TELESYNC|HDTS|TC)\b/.test(up)) sc -= 900;
+  if (s.h === 'Dolby Vision') sc += /HDR/.test(up) ? 25 : 0; else if (s.h) sc += 20;
+  if (/\bMKV\b|\.MKV/.test(up) && isIOS()) sc -= 150;            // Safari can't play MKV
+  sc += { 'Dolby Atmos': 24, 'Dolby TrueHD': 20, 'DTS:X': 20, 'DTS-HD MA': 16, 'Dolby Digital+': 12, 'Dolby Digital': 8 }[s.a] || 0;
+  sc += Math.min(s.gb || 0, 60) / 6;
+  const seeds = +((text.match(/👤\s*(\d+)/) || [])[1] ?? NaN);
+  if (!isNaN(seeds)) sc += Math.min(seeds, 200) / 20 - (seeds === 0 ? 120 : 0);
+  return sc;
+}
+const rankStreams = (list, orig) => list.map(s => [s, streamScore(s, orig)]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 const AUDIO_RANK = ['Dolby Atmos', 'Dolby TrueHD', 'DTS:X', 'DTS-HD MA', 'Dolby Digital+', 'Dolby Digital'];
 const audioTag = s => { s = s.toUpperCase();
   return /ATMOS/.test(s) ? 'Dolby Atmos' : /TRUE-?HD/.test(s) ? 'Dolby TrueHD' : /DTS[:-]?X/.test(s) ? 'DTS:X' : /DTS-HD|DTS HD|DTS-MA/.test(s) ? 'DTS-HD MA'
@@ -849,11 +903,13 @@ function mountDiscover(root) {
 // ============================================================================ router
 const view = $('#view');
 let routeToken = 0;
-const TABS = [['home', 'Home', 'home'], ['livetv', 'Live TV', 'livetv'], ['search', 'Search', 'search'], ['library', 'Library', 'library'], ['settings', 'Settings', 'settings']];
+const TABS = [['home', 'Home', 'home'], ['livetv', 'Live TV', 'livetv'], ['search', 'Search', 'search'], ['library', 'Library', 'library'], ['settings', 'Profile', 'avatar']];
 const scrollMemo = {};
 function renderNav(active) {
   const nav = $('#nav');
-  nav.innerHTML = TABS.map(([k, l, i]) => `<a class="nav-item ${k === active ? 'on' : ''}" href="#/${k}" aria-label="${T(l)}">${ic(i)}<span class="lbl">${T(l)}</span></a>`).join('');
+  // the Profile tab shows your picture (like the phone app and Nuvio)
+  const me = activeProfile();
+  nav.innerHTML = TABS.map(([k, l, i]) => `<a class="nav-item ${k === active ? 'on' : ''} ${i === 'avatar' ? 'nav-me' : ''}" href="#/${k}" aria-label="${T(l)}">${i === 'avatar' ? avatarHTML(me.avatar, me.avatarUrl, 26) : ic(i)}<span class="lbl">${T(l)}</span></a>`).join('');
   nav.classList.toggle('hidden', !active);
   view.classList.toggle('no-nav', !active);
 }
@@ -1070,8 +1126,9 @@ function playChannel(list, i) {
   PLAYER.channels = list; PLAYER.chIndex = i;
   startPlayer({ type: 'live', id: null, local: true, title: cleanName(ch.name), subtitle: `${i + 1} · ${ch.groups[0] || T('Live TV')}`, url: ch.url });
 }
-function toggleFav(ch) {
+function toggleFav(ch, card) {
   const has = (S.favs || []).some(x => x.url === ch.url);
+  if (!has && card) flyTo(card, '❤', '#FF4D6D', true);   // a heart pops out and settles in the corner
   S.favs = has ? S.favs.filter(x => x.url !== ch.url) : [...(S.favs || []), { name: cleanName(ch.name), url: ch.url, logo: ch.logo || null, group: ch.groups[0] || '' }];
   saveSettings(); toast(T(has ? 'Removed from Favourites' : 'Added to Favourites'));
 }
@@ -1084,7 +1141,7 @@ function chCard(ch, i, favs) {
 function bindChannels(box, list) {
   box.querySelectorAll('.ch').forEach(b => {
     let t = null, long = false;
-    b.onpointerdown = () => { long = false; t = setTimeout(() => { long = true; toggleFav(list[+b.dataset.i]); }, 550); };
+    b.onpointerdown = () => { long = false; t = setTimeout(() => { long = true; toggleFav(list[+b.dataset.i], b.querySelector('.ch-logo')); }, 550); };
     b.onpointerup = b.onpointerleave = () => clearTimeout(t);
     b.oncontextmenu = e => { e.preventDefault(); };
     b.onclick = () => { if (!long) playChannel(list, +b.dataset.i); };
@@ -1380,15 +1437,16 @@ async function detailsView(type, id, token) {
       <button class="icon-btn mute-btn" id="d-mute" hidden aria-label="${T('Sound')}">${ic('volOff')}</button>
       <div class="d-info gutter"><div class="pst">${img(d.poster_path && IMG + 'w342' + d.poster_path)}</div>
         <div style="min-width:0;max-width:640px">${titleArt(pickLogo(d.images?.logos), titleOf(d), 'd-logo')}${d.tagline ? `<div class="tag">${esc(d.tagline)}</div>` : ''}
-          <div class="meta">${yearOf(d) ? `<span class="badge">${yearOf(d)}</span>` : ''}${d.vote_average ? `<span class="badge">★ ${d.vote_average.toFixed(1)}</span>` : ''}${runtime ? `<span class="badge">${Math.floor(runtime / 60) ? Math.floor(runtime / 60) + 'h ' : ''}${runtime % 60}m</span>` : ''}${type === 'tv' ? `<span class="badge">${seasons.length} ${T("Seasons")}</span>` : ''}</div>
+          <div class="meta">${yearOf(d) ? `<span class="badge">${yearOf(d)}</span>` : ''}${d.vote_average ? `<span class="badge">★ ${d.vote_average.toFixed(1)}</span>` : ''}${runtime ? `<span class="badge">${Math.floor(runtime / 60) ? Math.floor(runtime / 60) + 'h ' : ''}${runtime % 60}m</span>` : ''}<span id="d-age"></span>${type === 'tv' ? `<span class="badge">${seasons.length} ${T("Seasons")}</span>` : ''}</div>
           <div class="genres">${esc((d.genres || []).map(g => g.name).join(' • '))}</div>
-          <div class="row-btns"><a class="btn white" href="${playHref}">${ic('play')}${esc(playLabel)}</a>
+          <div class="row-btns"><a class="btn white" id="d-play" href="${playHref}" title="${T('Hold or right-click to choose the source yourself')}">${ic('play')}${esc(playLabel)}</a>
           <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button>
           ${bestTrailer(d.videos) ? `<button class="btn tonal" id="d-tr">${ic('movie')}${T('Trailer')}</button>` : ''}</div>
         </div></div></div>
     <p class="overview gutter">${esc(d.overview)}</p>
     ${type === 'tv' ? `<div class="chips gutter" id="seasons">${seasons.map(s => `<button class="chip ${s.season_number === season ? 'on' : ''}" data-n="${s.season_number}">${esc(s.name)}</button>`).join('')}</div><div class="eps gutter" id="eps"></div>` : ''}
     ${(d.credits?.cast || []).length ? `<div class="rail-title gutter">${T("Cast")}</div><div class="rail gutter">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" onclick="location.hash='#/person/${c.id}'">${c.profile_path ? `<img src="${IMG}w185${c.profile_path}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}`;
+  ageRating(type, id).then(a => { const el = $('#d-age'); if (el && a?.label) el.outerHTML = `<span class="badge age">${esc(a.label)}</span>`; });
   // The trailer starts by itself over the artwork (muted unless Settings → Appearance says sound; tap 🔇 for sound)
   const trKey = bestTrailer(d.videos);
   if (trKey) $('#d-tr').onclick = () => { detailTrailer?.stop(); $('#d-mute').hidden = true; trailerOverlay(trKey); };
@@ -1405,6 +1463,8 @@ async function detailsView(type, id, token) {
     mb.innerHTML = ic('volOff');
     mb.onclick = () => detailTrailer.setSound(muted);
   }, 1200);
+  // Play: the best stream straight away; hold / right-click: the sources list
+  tapOrHold($('#d-play'), () => quickPlay(type, id, type === 'tv' ? (resume?.season || season) : null, type === 'tv' ? (resume?.episode || 1) : null), () => { location.hash = playHref; });
   $('#wl').onclick = () => {
     updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, { watch: !(cur && cur.watch) }));
     const on = libEntry(type, id)?.watch; $('#wl').innerHTML = ic(on ? 'bookmark' : 'bookmarkO'); toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
@@ -1421,6 +1481,7 @@ async function detailsView(type, id, token) {
         const seen = (le?.eps || []).includes(`${ep.season_number}:${ep.episode_number}`);
         return `<a class="ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && p < .92 ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${cur && !seen ? `<small class="ep-here">${T('Continue')}</small>` : ''}${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p>${esc(ep.overview || '')}</p></div></a>`;
       }).join('');
+      box.querySelectorAll('.ep').forEach(a => { const [, , , , sn, en] = a.getAttribute('href').split('/'); tapOrHold(a, () => quickPlay('tv', id, +sn, +en), () => { location.hash = a.getAttribute('href'); }); });
     };
     view.querySelectorAll('#seasons .chip').forEach(c => c.onclick = () => showSeason(+c.dataset.n));
     showSeason(season);
@@ -1448,7 +1509,7 @@ async function streamsView(type, id, season, episode, token) {
   const list = $('#slist');
   if (!S.addons.some(a => supports(a, 'stream'))) { list.innerHTML = msg('No stream addon installed yet', 'Add one in Settings → Stream addons, or play a link / file above.', `<a class="btn acc" href="#/settings">${T("Open Settings")}</a>`); return; }
   if (!imdb) { list.innerHTML = msg('No streams', "This title has no IMDb id, so addons can't look it up."); return; }
-  const streams = await getStreams(type, imdb, season, episode);
+  const streams = rankStreams(await getStreams(type, imdb, season, episode), d.original_language);
   if (!list.isConnected) return;
   if (!streams.length) { list.innerHTML = msg('No streams', 'Your addons returned no streams for this title.'); return; }
   let filter = 'All';
@@ -1473,6 +1534,111 @@ async function streamsView(type, id, season, episode, token) {
     list.querySelectorAll('.source').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon }); });
   };
   draw();
+}
+
+// ============================================================================ little moments (same as the apps)
+/** A star / heart flies from the middle of the screen (where menus open) — or out of the card — to the card. */
+function flyTo(target, glyph, colour, corner) {
+  if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = target.getBoundingClientRect(), to = corner ? [r.right - 16, r.top + 16] : [r.left + r.width / 2, r.top + r.height / 2];
+  const from = corner ? [r.left + r.width / 2, r.top + r.height / 2] : [innerWidth / 2, innerHeight / 2];
+  const f = document.createElement('div'); f.className = 'fly-fx'; f.textContent = glyph; f.style.color = colour;
+  document.body.appendChild(f);
+  const lift = Math.max(160, Math.hypot(to[0] - from[0], to[1] - from[1])) * .35, frames = [];
+  for (let i = 0; i <= 12; i++) { const p = i / 12, x = from[0] + (to[0] - from[0]) * p, y = from[1] + (to[1] - from[1]) * p - lift * 4 * p * (1 - p), sc = p < .35 ? .6 + p / .35 * .9 : 1.5 - (p - .35) / .65 * .9;
+    frames.push({ transform: `translate(${x - 15}px, ${y - 15}px) scale(${sc}) rotate(${(1 - p) * -40}deg)`, opacity: 1 }); }
+  f.animate(frames, { duration: 620, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => {
+    f.remove();
+    const b = document.createElement('div'); b.className = 'burst-fx'; b.style.left = to[0] + 'px'; b.style.top = to[1] + 'px'; b.style.color = colour;
+    document.body.appendChild(b); setTimeout(() => b.remove(), 500);
+  };
+}
+/** "Remove from Continue Watching": the poster crumbles away as drifting dust (Lumio's take on Nuvio's), then leaves. */
+function dissolve(el, then) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return then();
+  const r = el.getBoundingClientRect(), img = el.querySelector('img');
+  let colours = ['#d9d2c5', '#8f8577', '#5b5249', '#c9a46a'];
+  try {   // the poster's own colours (TMDB pictures allow it)
+    const c = document.createElement('canvas'); c.width = 6; c.height = 9; const g = c.getContext('2d'); g.drawImage(img, 0, 0, 6, 9);
+    const d = g.getImageData(0, 0, 6, 9).data; colours = []; for (let i = 0; i < d.length; i += 4) colours.push(`rgb(${d[i]},${d[i + 1]},${d[i + 2]})`);
+  } catch { /* cross-origin: neutral dust */ }
+  const layer = document.createElement('div'); layer.className = 'dust-fx'; Object.assign(layer.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  document.body.appendChild(layer);
+  for (let i = 0; i < 70; i++) {
+    const g = document.createElement('i'), nx = Math.random(), ny = Math.random(), delay = ((.55 * nx + .45 * (1 - ny)) * 650) | 0, size = 3 + Math.random() * 5;
+    Object.assign(g.style, { left: nx * 100 + '%', top: ny * 100 + '%', width: size + 'px', height: size + 'px', background: colours[(Math.random() * colours.length) | 0] });
+    layer.appendChild(g);
+    g.animate([{ transform: 'translate(0,0)', opacity: 0 }, { opacity: 1, offset: .05 }, { transform: `translate(${(25 + Math.random() * 55) * r.width / 100}px, ${-(30 + Math.random() * 60) * r.height / 100}px) scale(.4)`, opacity: 0 }],
+      { duration: 650, delay, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'both' });
+  }
+  el.style.transition = 'none';
+  el.animate([{ clipPath: 'polygon(0 0,100% 0,100% 100%,0 100%)' }, { clipPath: 'polygon(100% 0,100% 0,100% 100%,100% 100%)' }], { duration: 760, easing: 'linear', fill: 'forwards' })
+    .onfinish = () => { setTimeout(() => layer.remove(), 700); el.animate([{ width: el.offsetWidth + 'px', marginInlineEnd: '0px' }, { width: '0px', marginInlineEnd: '-12px' }], { duration: 300, easing: 'ease-out', fill: 'forwards' }).onfinish = then; };
+}
+/**
+ * Computers (mouse): rest on a poster and it opens into a wide card with the artwork and the trailer (muted),
+ * like Netflix; it closes when the mouse leaves. Click it to open the title.
+ */
+(() => {
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  let timer = null, pop = null, src = null;
+  const close = () => { clearTimeout(timer); pop?.remove(); pop = null; src = null; };
+  document.addEventListener('mouseover', e => {
+    const p = e.target.closest('.poster');
+    if (pop && (e.target.closest('.pv-pop') || p === src)) return;
+    if (!p) { if (pop && !e.target.closest('.pv-pop')) close(); clearTimeout(timer); return; }
+    if (p === src) return;
+    close(); src = p;
+    timer = setTimeout(async () => {
+      if (S.trailers === 'off' || src !== p || !p.isConnected || PLAYER.el) return;
+      const type = p.dataset.type, id = +p.dataset.id, r = p.querySelector('.art').getBoundingClientRect();
+      const w = Math.min(r.width * 2.667, innerWidth - 32), left = r.left + w > innerWidth - 16 ? Math.max(16, r.right - w) : r.left;
+      pop = document.createElement('a'); pop.className = 'pv-pop'; pop.href = `#/details/${type}/${id}`;
+      Object.assign(pop.style, { left: left + 'px', top: r.top + 'px', width: w + 'px', height: r.height + 'px', transformOrigin: left < r.left ? 'right center' : 'left center' });
+      pop.innerHTML = `<img class="pv-bg" alt=""><div class="trailer-box"></div><div class="pv-shade"></div><div class="pv-logo"></div>`;
+      document.body.appendChild(pop);
+      pop.addEventListener('mouseleave', close); pop.addEventListener('click', () => setTimeout(close, 0));
+      const d = await api.details(type, id).catch(() => null); if (!pop || src !== p || !d) return;
+      $('.pv-bg', pop).src = IMG + 'w780' + (d.backdrop_path || d.poster_path);
+      $('.pv-logo', pop).innerHTML = titleArt(pickLogo(d.images?.logos), titleOf(d), 'pv-l');
+      const k = bestTrailer(d.videos);
+      if (k) setTimeout(() => { if (pop && src === p) mountTrailer($('.trailer-box', pop), k, { muted: true }); }, 500);
+    }, 900);
+  });
+  addEventListener('scroll', close, { passive: true }); addEventListener('hashchange', close);
+})();
+
+// ============================================================================ play straight away
+/** Press Play → the best stream starts by itself (no sources list). Hold / right-click → choose the source yourself. */
+let QP = 0;
+async function quickPlay(type, id, season, episode) {
+  const my = ++QP;
+  document.querySelector('.qp')?.remove();
+  const card = document.createElement('div'); card.className = 'qp';
+  card.innerHTML = `<span class="mini-spin"></span><div><b>${T('Finding the best stream…')}</b><small id="qp-t"></small></div><button>${T('Cancel')}</button>`;
+  document.body.appendChild(card);
+  const done = () => card.remove();
+  $('button', card).onclick = () => { QP++; done(); };
+  const manual = msg => { if (my !== QP) return; done(); if (msg) toast(msg); location.hash = `#/streams/${type}/${id}/${season ?? '-'}/${episode ?? '-'}`; };
+  try {
+    const d = await api.details(type, id); if (my !== QP) return;
+    $('#qp-t', card).textContent = titleOf(d) + (season != null ? `  ·  S${season} • E${episode}` : '');
+    const imdb = d.imdb_id || d.external_ids?.imdb_id;
+    if (!imdb || !S.addons.some(a => supports(a, 'stream'))) return manual();
+    const best = rankStreams(await getStreams(type, imdb, season, episode), d.original_language)[0];
+    if (my !== QP) return;
+    if (!best) return manual('No stream found — choose one yourself');
+    done();
+    startPlayer({ url: best.url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path, addon: best.addon });
+  } catch { manual(); }
+}
+/** Click = [tap]; touch-and-hold or right-click = [hold] (used for Play buttons and episodes). */
+function tapOrHold(el, tap, hold) {
+  let t = null, held = false;
+  el.addEventListener('touchstart', () => { held = false; t = setTimeout(() => { held = true; haptic('tap'); hold(); }, 500); }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(t), { passive: true }));
+  el.addEventListener('contextmenu', e => { e.preventDefault(); hold(); });
+  el.addEventListener('click', e => { e.preventDefault(); if (held) { held = false; return; } tap(); });
 }
 
 // ============================================================================ sheets
@@ -1592,6 +1758,13 @@ function openPlayer() {
     else st.introLoaded = true;
   }, { once: true });
   v.play().catch(() => { /* user taps play */ });
+  // Age rating + what it contains, top-left for ~7 s once it starts (like Netflix)
+  if (r.id && !r.local && r.type !== 'live') v.addEventListener('playing', async () => {
+    const a = await ageRating(r.type, r.id); if (!a || PLAYER.el !== el) return;
+    const b = document.createElement('div'); b.className = 'p-adv';
+    b.innerHTML = `<i></i><div>${a.label ? `<b>${T('Rated')} ${esc(a.label)}</b>` : ''}${a.adv.length ? `<span>${a.adv.map(x => T(x).toLowerCase()).join(', ')}</span>` : ''}</div>`;
+    setTimeout(() => { if (PLAYER.el !== el) return; el.appendChild(b); setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 800); }, 7000); }, 1200);
+  }, { once: true });
 
   // ---- controls visibility
   let hideT;
@@ -1742,24 +1915,73 @@ function openPlayer() {
     if (f) { v.currentTime = f.end / 1000; toast('Scene skipped'); return; }
     const seg = st.segs.find(s => pos >= s.start && pos < (s.end ?? dur) - 300);
     const mode = seg ? (seg.kind === 'intro' ? S.skipIntro : seg.kind === 'recap' ? S.skipRecap : S.skipCredits) : 'off';
-    if (!seg || mode === 'off') return showPill(null);
+    if (!seg || mode === 'off' || (up.shown && (seg.kind === 'credits' || seg.kind === 'preview'))) return showPill(null);
     if (mode === 'auto' && !st.handled.has(seg)) { skipSeg(seg); toast(segLabel(seg.kind).replace('Skip', 'Skipped')); return; }
     showPill(seg);
   });
 
-  // ---- next episode
+  // ---- next episode: "Up next" glass card near the end (or "not out yet" in the middle), like the apps
+  const up = { next: undefined, shown: false, closed: false, at: 0 };
+  async function findNext() {
+    if (up.next !== undefined || r.type !== 'tv' || r.season == null || !r.id) return;
+    up.next = null;
+    const today = new Date().toISOString().slice(0, 10);
+    const cur = await api.season(r.id, r.season).catch(() => []);
+    const ep = cur.find(x => x.episode_number === r.episode + 1) || (await api.season(r.id, r.season + 1).catch(() => [])).sort((a, b) => a.episode_number - b.episode_number)[0];
+    if (ep) up.next = { season: ep.season_number, episode: ep.episode_number, name: ep.name || `${T('Episode')} ${ep.episode_number}`, still: ep.still_path, air: ep.air_date || null,
+      runtime: ep.runtime, released: !ep.air_date || ep.air_date <= today };
+  }
+  const shortDate = iso => { if (!iso) return ''; const d = new Date(iso + 'T12:00:00'); return d.toLocaleDateString(S.lang === 'ar' ? 'ar' : undefined, d.getFullYear() === new Date().getFullYear() ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' }); };
+  function showUpNext() {
+    const n = up.next; if (!n || up.shown || up.closed) return;
+    up.shown = true; up.at = v.currentTime;
+    saveProgress();                                       // ticks the episode as watched
+    const card = document.createElement('div');
+    if (n.released) {
+      card.className = 'upnext glass';
+      card.innerHTML = `<div class="un-pic">${n.still ? `<img src="${IMG}w300${n.still}" alt="">` : ''}<span>S${n.season} • E${n.episode}</span></div>
+        <div class="un-txt"><small class="un-l">${T('Next episode')}</small><b>${esc(n.name)}</b><small class="dim">${[n.runtime ? n.runtime + 'm' : '', shortDate(n.air)].filter(Boolean).join('  ·  ')}</small>
+        <div class="un-btns"><button class="un-play"><i></i>${ic('play')}<span>${T('Play now')}</span></button><button class="un-x" aria-label="${T('Close')}">${ic('close')}</button></div></div>`;
+      $('.un-play', card).onclick = e => { e.stopPropagation(); card.remove(); playNext(n); };
+      $('.un-x', card).onclick = e => { e.stopPropagation(); up.closed = true; card.remove(); };
+      const fill = $('.un-play i', card), label = $('.un-play span', card);
+      const tick = () => { if (!card.isConnected) return; const d = v.duration || 1, f = Math.min(1, (v.currentTime - up.at) / Math.max(1, d - up.at)), left = Math.max(0, Math.round(d - v.currentTime));
+        if (S.autoNext) { fill.style.width = f * 100 + '%'; label.textContent = left > 0 && left <= 90 ? `${T('Next in')} ${left}s` : T('Play now'); } requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    } else {
+      // not out yet: the credits keep playing underneath (like Netflix)
+      card.className = 'notyet glass';
+      card.innerHTML = `<span class="ny-ic">${ic('cal')}</span><b>${T("The next episode isn't out yet")}</b><small>S${n.season} • E${n.episode}${n.name ? '  ·  ' + esc(n.name) : ''}</small>
+        <em>${n.air ? `${T('Comes out')} ${shortDate(n.air)}` : T('No release date yet')}</em>
+        <div class="row-btns"><button class="btn acc" id="ny-r">${T('Remind me')}</button><button class="btn tonal" id="ny-x">${T('Not now')}</button></div>`;
+      $('#ny-r', card).onclick = e => { e.stopPropagation(); updateLib(r.type, r.id, cur => Object.assign(cur || { type: r.type, id: r.id, title: r.title, poster: r.poster, backdrop: r.backdrop }, { watch: true })); toast("Added to your Library — the Lumio app will let you know when it's out"); up.closed = true; card.remove(); };
+      $('#ny-x', card).onclick = e => { e.stopPropagation(); up.closed = true; card.remove(); if (v.ended) closePlayer(); };
+    }
+    card.addEventListener('click', e => e.stopPropagation());
+    el.appendChild(card);
+  }
+  v.addEventListener('timeupdate', () => {
+    const d = v.duration; if (!d || !isFinite(d) || d < 120) return;
+    if (v.currentTime > d / 3) findNext();
+    const credits = st.segs.find(x => x.kind === 'credits' || x.kind === 'preview');
+    const at = credits && credits.start / 1000 > d / 2 ? credits.start / 1000 : d - 40;
+    if (v.currentTime >= at) showUpNext();
+  });
   async function onEnded() {
     saveProgress();
-    if (r.type === 'tv' && S.autoNext && r.imdb && r.season != null) playNext(); else closePlayer();
+    if (up.next && !up.next.released && !up.closed) return;          // "not out yet" card stays until closed
+    if (up.closed && up.next) return closePlayer();                   // you closed the card: no auto-play
+    if (r.type === 'tv' && S.autoNext && r.imdb && r.season != null) playNext(up.next); else closePlayer();
   }
-  async function playNext() {
+  async function playNext(target) {
     toast('Loading next episode…');
-    const next = r.episode + 1;
-    const streams = await getStreams('tv', r.imdb, r.season, next).catch(() => []);
-    const pick = streams.find(s => s.addon === r.addon) || streams[0];
+    const season = target?.season ?? r.season, next = target?.episode ?? r.episode + 1;
+    const orig = (await api.details('tv', r.id).catch(() => ({}))).original_language;
+    const streams = rankStreams(await getStreams('tv', r.imdb, season, next).catch(() => []), orig);
+    const pick = streams.slice(0, 3).find(s => s.addon === r.addon) || streams[0];
     if (!pick) { toast('No stream found for the next episode'); return closePlayer(); }
     saveProgress();
-    PLAYER.req = Object.assign({}, r, { url: pick.url, addon: pick.addon, episode: next, subtitle: `S${r.season} • E${next}`, start: 0 });
+    PLAYER.req = Object.assign({}, r, { url: pick.url, addon: pick.addon, season, episode: next, subtitle: `S${season} • E${next}`, start: 0 });
     openPlayer();
   }
 
@@ -1900,6 +2122,25 @@ function popup(header, opts) {
   bg.querySelectorAll('.opt').forEach(b => b.onclick = () => { closePop(); opts[+b.dataset.i].fn(); });
   document.body.appendChild(bg);
 }
+/**
+ * Haptics. Android (Chrome) uses the vibration motor directly. iPhone Safari has no vibrate(), but toggling a hidden
+ * system switch gives the phone's own light "tick" (Safari 18+), so we use that and repeat it for success / errors.
+ */
+const haptic = (() => {
+  let sw = null;
+  const tick = () => {
+    if (!sw) { const l = document.createElement('label'); l.setAttribute('aria-hidden', 'true'); l.style.cssText = 'position:fixed;left:-99px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
+      l.innerHTML = '<input type="checkbox" switch tabindex="-1">'; document.body.appendChild(l); sw = l; }
+    sw.click();
+  };
+  const P = { tap: [10, 1], del: [6, 1], ok: [[14, 70, 22], 2], error: [[45, 55, 45, 55, 70], 3] };
+  return kind => {
+    const [pat, n] = P[kind] || P.tap;
+    try { if (navigator.vibrate) { navigator.vibrate(pat); return; } } catch { }
+    if (!/iP(hone|ad|od)|Macintosh/.test(navigator.userAgent) || !('ontouchend' in document)) return;
+    for (let i = 0; i < n; i++) setTimeout(tick, i * 110);
+  };
+})();
 /** 4-digit PIN pad. setNew → enter + confirm, resolves with the PIN; otherwise resolves true once `check(pin)` passes. */
 function pinPad({ title, setNew, check }) {
   return new Promise(resolve => {
@@ -1914,8 +2155,8 @@ function pinPad({ title, setNew, check }) {
     document.body.appendChild(bg);
     const dots = bg.querySelectorAll('#dots i'), err = $('#perr', bg);
     const paint = () => dots.forEach((d, i) => d.classList.toggle('on', i < pin.length));
-    const done = v => { bg.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
-    const fail = m => { err.textContent = T(m); pin = ''; paint(); const box = $('.pop', bg); box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); navigator.vibrate?.(60); };
+    const done = v => { if (v) haptic('ok'); bg.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const fail = m => { err.textContent = T(m); pin = ''; paint(); const box = $('.pop', bg); box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); haptic('error'); };
     const complete = async () => {
       if (setNew) {
         if (first == null) { first = pin; pin = ''; paint(); $('#pinh', bg).textContent = head(); err.innerHTML = '&nbsp;'; }
@@ -1923,7 +2164,7 @@ function pinPad({ title, setNew, check }) {
         else { first = null; $('#pinh', bg).textContent = head(); fail("PINs don't match. Try again."); }
       } else if (await check(pin)) done(true); else fail('Wrong PIN');
     };
-    const press = k => { if (k === 'del') { pin = pin.slice(0, -1); paint(); return; } if (pin.length < 4) { pin += k; paint(); if (pin.length === 4) setTimeout(complete, 120); } };
+    const press = k => { if (k === 'del') { if (pin) haptic('del'); pin = pin.slice(0, -1); paint(); return; } if (pin.length < 4) { haptic('tap'); pin += k; paint(); if (pin.length === 4) setTimeout(complete, 120); } };
     bg.querySelectorAll('.pad button').forEach(b => b.onclick = () => press(b.dataset.k));
     const onKey = e => { if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('del'); else if (e.key === 'Escape') done(null); };
     document.addEventListener('keydown', onKey);
@@ -1950,7 +2191,7 @@ async function lockGate(type, id, token) {
 function playEntry(e, fromStart) {
   if (fromStart) updateLib(e.type, e.id, cur => Object.assign(cur, { pos: 0 }));
   if (e.url && !e.url.startsWith('blob:')) startPlayer({ url: e.url, title: e.title, subtitle: e.season != null ? `S${e.season} • E${e.episode}` : '', type: e.type, id: e.id, imdb: e.imdb, season: e.season, episode: e.episode, poster: e.poster, backdrop: e.backdrop, addon: e.addon });
-  else location.hash = `#/streams/${e.type}/${e.id}/${e.season ?? '-'}/${e.episode ?? '-'}`;
+  else quickPlay(e.type, e.id, e.season, e.episode);   // e.g. a new episode: the best stream straight away
 }
 function openPosterMenu(p) {
   if (document.querySelector('.pop-bg')) return;
@@ -1963,9 +2204,10 @@ function openPosterMenu(p) {
     opts = [
       { icon: 'play', t: 'Continue watching', s: e.season != null ? `S${e.season} • E${e.episode}` : '', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), false)) },
       { icon: 'replay', t: 'Play from beginning', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), true)) },
+      { icon: 'speed', t: 'Play manually', s: 'Choose the source yourself', fn: () => unlockThen(type, id, title, () => { location.hash = `#/streams/${type}/${id}/${e.season ?? (type === 'tv' ? 1 : '-')}/${e.episode ?? (type === 'tv' ? 1 : '-')}`; }) },
       { icon: 'remove', t: 'Remove from Continue Watching', fn: () => unlockThen(type, id, title, () => {
         updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0 }));   // kept, cleared and newer — a deleted one came back from other devices' copy
-        document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`).forEach(x => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } });
+        document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`).forEach(x => dissolve(x, () => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } }));
         toast('Removed from Continue Watching');
       }) },
       e.pin
@@ -1974,8 +2216,11 @@ function openPosterMenu(p) {
     ];
   } else {
     const inLib = !!(e && e.watch), watched = !!(e && e.watched);
+    const s0 = type === 'tv' ? (e?.season || 1) : null, e0 = type === 'tv' ? (e?.episode || 1) : null;
     opts = [
-      { icon: inLib ? 'bookmark' : 'bookmarkO', t: inLib ? 'Remove from Library' : 'Add to Library', fn: () => { updateLib(type, id, cur => Object.assign(base(cur), { watch: !inLib })); toast(inLib ? 'Removed from Library' : 'Added to Library'); } },
+      { icon: 'play', t: 'Play', s: type === 'tv' ? `S${s0} • E${e0}` : '', fn: () => unlockThen(type, id, title, () => quickPlay(type, id, s0, e0)) },
+      { icon: 'speed', t: 'Play manually', s: 'Choose the source yourself', fn: () => unlockThen(type, id, title, () => { location.hash = `#/streams/${type}/${id}/${s0 ?? '-'}/${e0 ?? '-'}`; }) },
+      { icon: inLib ? 'bookmark' : 'bookmarkO', t: inLib ? 'Remove from Library' : 'Add to Library', fn: () => { if (!inLib) flyTo(p, '★', '#FFC94D'); updateLib(type, id, cur => Object.assign(base(cur), { watch: !inLib })); toast(inLib ? 'Removed from Library' : 'Added to Library'); } },
       { icon: 'checkC', t: watched ? 'Mark as unwatched' : 'Mark as watched', fn: () => { updateLib(type, id, cur => Object.assign(base(cur), { watched: !watched })); refreshBadges(type, id); toast(watched ? 'Marked as unwatched' : 'Marked as watched'); } },
     ];
   }
@@ -1986,7 +2231,7 @@ let lpTimer = null, lpFired = false, lpXY = null;
 document.addEventListener('touchstart', e => {
   const p = e.target.closest('.poster'); if (!p) return;
   lpFired = false; const t = e.touches[0]; lpXY = [t.clientX, t.clientY];
-  clearTimeout(lpTimer); lpTimer = setTimeout(() => { lpFired = true; navigator.vibrate?.(15); p.classList.add('pressed'); setTimeout(() => p.classList.remove('pressed'), 250); openPosterMenu(p); }, 480);
+  clearTimeout(lpTimer); lpTimer = setTimeout(() => { lpFired = true; haptic('tap'); p.classList.add('pressed'); setTimeout(() => p.classList.remove('pressed'), 250); openPosterMenu(p); }, 480);
 }, { passive: true });
 document.addEventListener('touchmove', e => { if (!lpXY) return; const t = e.touches[0]; if (Math.hypot(t.clientX - lpXY[0], t.clientY - lpXY[1]) > 10) clearTimeout(lpTimer); }, { passive: true });
 ['touchend', 'touchcancel'].forEach(ev => document.addEventListener(ev, () => clearTimeout(lpTimer), { passive: true }));
@@ -2287,8 +2532,11 @@ function settingsView(page) {
   const go = k => row('#/settings/' + k, SET_PAGES[k][1], SET_PAGES[k][2], SET_PAGES[k][0], settingsSummary(k));
   if (!page || !SET_PAGES[page]) {
     const p = activeProfile(), synced = raw.get('lumio.lastSync', 0);
-    view.innerHTML = `<h1 class="page-title gutter">${T("Settings")}</h1><div class="gutter hub-wrap">
-      <a class="card hub-profile" href="#/settings/account">${avatarHTML(p.avatar, p.avatarUrl, 56)}<div><b>${esc(p.name)}</b><small>${esc(SESSION?.email || '')}${synced ? ' · ' + T('Synced') : ''}</small></div>${chev}</a>
+    // Profile tab: you at the top (big picture, name, account), then all the settings — like Nuvio
+    view.innerHTML = `<div class="me-head gutter"><a class="me-av" href="#/settings/account">${avatarHTML(p.avatar, p.avatarUrl, 104)}</a>
+        <h1>${esc(p.name)}</h1><small class="dim">${esc(SESSION?.email || '')}${synced ? ' · ' + T('Synced') : ''}</small>
+        <div class="row-btns"><button class="btn tonal" id="me-switch">${T('Switch profile')}</button><a class="btn outline" href="#/settings/account">${T('Account')}</a></div></div>
+      <div class="gutter hub-wrap">
       <div class="hub-l">${T('Account')}</div>
       <div class="card hub">${go('account')}${go('party')}</div>
       <div class="hub-l">${T('General')}</div>
@@ -2296,6 +2544,7 @@ function settingsView(page) {
       <div class="hub-l">${T('About')}</div>
       <div class="card hub">${go('about')}</div>
       <div style="height:30px"></div></div>`;
+    $('#me-switch').onclick = () => profilesView();
     return;
   }
   const [title] = SET_PAGES[page];
