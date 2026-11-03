@@ -271,6 +271,7 @@ const P = {
   volOn: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z',
   volOff: 'M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z',
   prevT: 'M6 6h2v12H6zm3.5 6l8.5 6V6z',
+  logout: 'M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z',
   cal: 'M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z',
   lang: 'M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z',
 };
@@ -2141,6 +2142,21 @@ const haptic = (() => {
     for (let i = 0; i < n; i++) setTimeout(tick, i * 110);
   };
 })();
+/** A small "are you sure?" card. Resolves true when confirmed. */
+function askSure(title, msg, yes) {
+  return new Promise(resolve => {
+    closePop();
+    const bg = document.createElement('div'); bg.className = 'pop-bg';
+    bg.innerHTML = `<div class="pop sure" role="alertdialog"><h3>${T(title)}</h3><p class="dim">${T(msg)}</p>
+      <div class="row-btns"><button class="btn tonal" data-a="0">${T('Cancel')}</button><button class="btn acc" data-a="1">${T(yes)}</button></div></div>`;
+    document.body.appendChild(bg);
+    const end = v => { bg.remove(); document.removeEventListener('keydown', key); resolve(v); };
+    const key = e => { if (e.key === 'Escape') end(false); };
+    document.addEventListener('keydown', key);
+    bg.onclick = e => { const b = e.target.closest('[data-a]'); if (b) end(b.dataset.a === '1'); else if (e.target === bg) end(false); };
+    $('[data-a="1"]', bg).focus();
+  });
+}
 /** 4-digit PIN pad. setNew → enter + confirm, resolves with the PIN; otherwise resolves true once `check(pin)` passes. */
 function pinPad({ title, setNew, check }) {
   return new Promise(resolve => {
@@ -2531,20 +2547,20 @@ function settingsView(page) {
   const row = (href, icon, tint, title, sub) => `<a class="hub-row" href="${href}"><span class="hub-ic" style="--t:${tint}">${ic(icon)}</span><div><b>${esc(T(title))}</b><small>${esc(sub)}</small></div>${chev}</a>`;
   const go = k => row('#/settings/' + k, SET_PAGES[k][1], SET_PAGES[k][2], SET_PAGES[k][0], settingsSummary(k));
   if (!page || !SET_PAGES[page]) {
-    const p = activeProfile(), synced = raw.get('lumio.lastSync', 0);
+    const p = activeProfile();
     // Profile tab: you at the top (big picture, name, account), then all the settings — like Nuvio
-    view.innerHTML = `<div class="me-head gutter"><a class="me-av" href="#/settings/account">${avatarHTML(p.avatar, p.avatarUrl, 104)}</a>
-        <h1>${esc(p.name)}</h1><small class="dim">${esc(SESSION?.email || '')}${synced ? ' · ' + T('Synced') : ''}</small>
-        <div class="row-btns"><button class="btn tonal" id="me-switch">${T('Switch profile')}</button><a class="btn outline" href="#/settings/account">${T('Account')}</a></div></div>
+    // Profile tab: just you — picture, name, email, Switch profile and Sign out (syncing happens on its own), then the settings
+    view.innerHTML = `<div class="me-head gutter"><span class="me-av">${avatarHTML(p.avatar, p.avatarUrl, 104)}</span>
+        <h1>${esc(p.name)}</h1><small class="dim">${esc(SESSION?.email || '')}</small>
+        <div class="row-btns"><button class="btn tonal" id="me-switch">${ic('user')}${T('Switch profile')}</button>${SESSION ? `<button class="btn outline" id="me-out">${ic('logout')}${T('Sign out')}</button>` : ''}</div></div>
       <div class="gutter hub-wrap">
-      <div class="hub-l">${T('Account')}</div>
-      <div class="card hub">${go('account')}${go('party')}</div>
       <div class="hub-l">${T('General')}</div>
-      <div class="card hub">${row('#/appearance', 'palette', '#A855F7', 'Appearance', T('Theme, title colour, Arabic font and app icon'))}${go('language')}${go('content')}${go('addons')}${go('playback')}${standalone ? '' : go('install')}</div>
+      <div class="card hub">${go('party')}${row('#/appearance', 'palette', '#A855F7', 'Appearance', T('Theme, title colour, Arabic font and app icon'))}${go('language')}${go('content')}${go('addons')}${go('playback')}${standalone ? '' : go('install')}</div>
       <div class="hub-l">${T('About')}</div>
       <div class="card hub">${go('about')}</div>
       <div style="height:30px"></div></div>`;
     $('#me-switch').onclick = () => profilesView();
+    $('#me-out') && ($('#me-out').onclick = async () => { if (await askSure('Sign out?', 'Your library and settings stay saved in your account.', 'Sign out')) signOut(); });
     return;
   }
   const [title] = SET_PAGES[page];
@@ -2555,7 +2571,7 @@ function settingsView(page) {
 }
 function settingsSummary(k) {
   switch (k) {
-    case 'account': return T('Profile, sync status and sign out');
+    case 'account': return T('Profile and sign out');
     case 'party': return PARTY.code ? `${T('In party')} ${PARTY.code}` : T('Watch together in sync, chat and reactions');
     case 'language': return S.lang === 'ar' ? 'العربية' : 'English';
     case 'content': return `TMDB · ${T('region')} ${S.region}`;
@@ -2571,8 +2587,8 @@ function settingsPage(page, standalone) {
   switch (page) {
     case 'account': return `<div class="card">
       <div class="set-row">${avatarHTML(activeProfile().avatar, activeProfile().avatarUrl, 48)}<div><b>${esc(activeProfile().name)}</b><small>${T(activeProfile().id === MAIN ? 'Main profile' : activeProfile().shareAddons ? "Uses the main profile's addons" : 'Own addon list')}</small></div><button class="btn tonal" id="pswitch" style="height:36px;padding:0 14px">${T('Switch profile')}</button></div>
-      <div class="set-row"><span class="pin-ic">${ic('user')}</span><div><b>${esc(SESSION?.email || '')}</b><small>${raw.get('lumio.lastSync', 0) ? T('Synced') + ' ' + new Date(raw.get('lumio.lastSync', 0)).toLocaleString() : T('Not synced yet')}</small></div></div>
-      <div class="set-row" style="gap:10px"><button class="btn tonal" id="psync" style="height:36px;padding:0 14px">${T('Sync now')}</button><button class="btn outline" id="signout" style="height:36px;padding:0 14px">${T('Sign out')}</button></div></div>`;
+      <div class="set-row"><span class="pin-ic">${ic('user')}</span><div><b>${esc(SESSION?.email || '')}</b><small>${T('Syncs automatically')}</small></div></div>
+      <div class="set-row" style="gap:10px"><button class="btn outline" id="signout" style="height:36px;padding:0 14px">${T('Sign out')}</button></div></div>`;
     case 'party': return `<div class="card"><div class="set-row" style="display:block">${PARTY.code ? `<b>🎉 ${T('In party')} ${esc(PARTY.code)} · ${PARTY.members.length} ${T('watching')}</b>`
       : `<small>${T("Start a party from the player while watching (the 👥 button), or join a friend's with their code.")}</small>
       <form id="sjoin" class="prow" style="padding-top:10px"><input class="field" id="sjc" placeholder="ABC123" maxlength="8" autocapitalize="characters" autocomplete="off"><button class="btn acc">${T('Join')}</button></form>`}</div></div>`;
@@ -2639,7 +2655,6 @@ function bindSettings(page) {
   const on = (sel, ev, fn) => { const el = $(sel); if (el) el[ev] = fn; };
   on('#signout', 'onclick', signOut);
   on('#pswitch', 'onclick', () => { PROFILE_CHOSEN = false; profilesView(); });
-  on('#psync', 'onclick', async () => { toast('Syncing…'); try { await serial(() => cloudPullNow(true)); loadProfileData(); applyTheme(); applyLang(); toast('Synced'); re(); } catch { toast('Network error'); } });
   view.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { S.lang = b.dataset.lang; saveSettings(); renderNav(null); re(); renderNav('settings'); });
   const toggle = (id, key) => on('#' + id, 'onclick', () => { S[key] = !S[key]; saveSettings(); re(); });
   toggle('skipNudity', 'skipNudity'); toggle('autoNext', 'autoNext');
@@ -3090,7 +3105,8 @@ function applyCloudChanges() {
   else if (!PLAYER.el && !document.querySelector('.pop-bg, .sheet-bg, .welcome')) route();
 }
 // While the site is open, check for changes from other devices every minute
-setInterval(() => { if (SESSION && !document.hidden && !PLAYER.el) refreshFromCloud(); }, 60000);
+setInterval(() => { if (SESSION && !document.hidden && !PLAYER.el) refreshFromCloud(); }, 30000);   // always in sync — no "Sync now"
+document.addEventListener('visibilitychange', () => { if (document.hidden && SESSION) cloudPush().catch(() => { }); });   // leaving: upload right away
 // Coming back to the tab after a while → pick up changes from other devices
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
