@@ -172,8 +172,23 @@ async function tileArt(key) {
  * page has ~280 of them and nearly all are scrolled away; each running one keeps a GPU layer that every frame must
  * update. Same look, far less work per frame on phones. (The canvas scenes already draw only when visible.)
  */
+// Tiles leaving the screen stop at once (cheap). Tiles coming back wait until a fast flick settles and then restart a
+// few per frame — restarting a whole screenful mid-flick (new GPU layers, pictures re-drawn) was a visible hitch.
+let lastScroll = 0, wakeT = 0;
+const waking = new Set();
+addEventListener('scroll', () => { lastScroll = performance.now(); }, { capture: true, passive: true });
+function wake() {
+  wakeT = 0;
+  const idle = performance.now() - lastScroll;
+  if (idle < 150) { wakeT = setTimeout(wake, 160 - idle); return; }
+  let n = 0;
+  for (const el of waking) { waking.delete(el); el.classList.remove('anim-off'); if (++n >= 6) break; }
+  if (waking.size) wakeT = requestAnimationFrame(() => { wakeT = setTimeout(wake, 0); });
+}
 const animGate = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
-  e.target.classList.toggle('anim-off', !e.isIntersecting);
+  if (!e.isIntersecting) { waking.delete(e.target); e.target.classList.add('anim-off'); return; }
+  if (!e.target.classList.contains('anim-off')) return;
+  waking.add(e.target); if (!wakeT) wakeT = setTimeout(wake, 0);
 }), { rootMargin: '120px' }) : null;
 if (animGate) new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
   if (n.nodeType !== 1) return;
