@@ -131,14 +131,14 @@ h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--display); }
 .poster .y { font-size: 12px; color: var(--dim); margin-top: -4px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--poster), 1fr)); gap: 16px 12px; }
 .grid .poster { width: auto; }
-.fly { animation: fly .5s cubic-bezier(.2,.8,.3,1) both; }
+.fly { animation: fly .5s cubic-bezier(.2,.8,.3,1) backwards; }
 @keyframes fly { from { opacity: 0; transform: translateY(24px) scale(.92); } }
 
 /* ---------------- Animated tiles */
 .tile {
   position: relative; overflow: hidden; border-radius: 18px; color: #fff; text-align: left;
   background: linear-gradient(var(--ang, 135deg), var(--c1), var(--c2)); background-size: 220% 220%;
-  animation: tileIn .6s cubic-bezier(.3,1.4,.5,1) both, drift 8s ease-in-out infinite alternate;
+  animation: tileIn .6s cubic-bezier(.3,1.4,.5,1) backwards, drift 8s ease-in-out infinite alternate;
   transition: transform .18s;
 }
 .tile:active { transform: scale(.94); }
@@ -949,3 +949,8 @@ img.kb.ok { opacity: 1; }
 .me-head .row-btns .btn svg { width: 18px; height: 18px; margin-inline-end: 6px; }
 .pop.sure { padding: 22px 22px 18px; max-width: 360px; text-align: center; display: grid; gap: 8px; }
 .pop.sure p { margin: 0 0 8px; } .pop.sure .row-btns { justify-content: center; }
+
+/* Off-screen tiles (marked by the app ~120 px before they leave the screen): their endless effects stop completely so
+   they hold no GPU layers; the entrance animation keeps its finished state (same name first). Restarts before they come back. */
+.tile.anim-off { animation-name: tileIn, none; }
+.anim-off::before, .anim-off img.kb, .anim-off .slogo, .anim-off .slogo i, .anim-off .emoji, .section-h .bar.anim-off { animation: none; will-change: auto; }

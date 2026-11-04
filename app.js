@@ -167,6 +167,19 @@ async function tileArt(key) {
   if (path) { ART[key] = path; raw.set('tile_art2', ART); }
   return path;
 }
+/**
+ * Ambient animations (tiles drifting, pictures slowly zooming, logo sheens) only run while they're on screen — a home
+ * page has ~280 of them and nearly all are scrolled away; each running one keeps a GPU layer that every frame must
+ * update. Same look, far less work per frame on phones. (The canvas scenes already draw only when visible.)
+ */
+const animGate = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+  e.target.classList.toggle('anim-off', !e.isIntersecting);
+}), { rootMargin: '120px' }) : null;
+if (animGate) new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+  if (n.nodeType !== 1) return;
+  if (n.matches('.tile, .section-h .bar')) animGate.observe(n);
+  n.querySelectorAll?.('.tile, .section-h .bar').forEach(el => animGate.observe(el));
+}))).observe(document.body, { childList: true, subtree: true });
 const artObserver = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { artObserver.unobserve(e.target); fillArt(e.target); } }), { rootMargin: '300px' }) : null;
 /** How to show a studio logo: one-colour → white; colourful (WB shield, Marvel box, MGM lion) → real colours; dark → on a light plate. */
 const LOOK = {};
@@ -199,7 +212,7 @@ const decadeTile = (d, i) => `<a class="tile dec ph" href="#/catalog/decade/${d.
 const GENRE_FX = { action: 'ember', adventure: 'dust', comedy: 'bubbles', drama: 'candle', scifi: 'hyperspace', horror: 'fog', thriller: 'spotlight', anime: 'petals', animation: 'arc', family: 'stars',
   romance: 'hearts', crime: 'siren', mystery: 'mist', fantasy: 'magic', documentary: 'globe', war: 'searchlights', history: 'grain', western: 'sand', music: 'music', reality: 'flash', kids: 'bubbles' };
 const DISCOVER_FX = { foryou: 'magic', trending: 'ember', popular: 'flash', top_rated: 'rays' };
-const photoBits = (row, key, fx, i) => `<img class="kb" data-row="${row}" data-key="${key}" alt="" style="animation-delay:-${(i * 1.3) % 16}s" onload="this.classList.add('ok')"><i class="scrim"></i>${fx ? `<canvas data-scene="fx_${fx}" data-i="${i}"></canvas>` : ''}`;
+const photoBits = (row, key, fx, i) => `<img class="kb" data-row="${row}" data-key="${key}" alt="" loading="lazy" decoding="async" style="animation-delay:-${(i * 1.3) % 16}s" onload="this.classList.add('ok')"><i class="scrim"></i>${fx ? `<canvas data-scene="fx_${fx}" data-i="${i}"></canvas>` : ''}`;
 const ROWART = {};
 function rowArt(row) {
   const all = raw.get('row_art', {}), c = all[row], ttl = row === 'discover' ? 12 * 3600e3 : 14 * 86400e3;
@@ -217,8 +230,13 @@ function rowArt(row) {
   })());
 }
 function fillRowArt(root) {
-  ['discover', 'genres', 'decades'].forEach(row => { const imgs = root.querySelectorAll(`img[data-row="${row}"]`); if (!imgs.length) return;
-    rowArt(row).then(map => imgs.forEach(im => { const p = map[im.dataset.key]; if (p && !im.src) im.src = IMG + (im.dataset.size || 'w780') + p; })); });
+  ['discover', 'genres', 'decades'].forEach(row => { const imgs = [...root.querySelectorAll(`img[data-row="${row}"]`)]; if (!imgs.length) return;
+    const fill = () => rowArt(row).then(map => imgs.forEach(im => { const p = map[im.dataset.key]; if (p && !im.src) im.src = IMG + (im.dataset.size || 'w780') + p; }));
+    // pictures load when the row is about a screen away (the row's own lookups too); a big banner (catalog page) loads at once
+    if (!('IntersectionObserver' in window) || imgs[0].dataset.size) return fill();
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); fill(); } }, { rootMargin: '400px 0px' });
+    io.observe(imgs[0].closest('.rail') || imgs[0]);
+  });
 }
 
 // ============================================================================ icons
@@ -861,7 +879,8 @@ async function introSegments(type, id, season, episode, durMs) {
 }
 
 // ============================================================================ views: shared pieces
-function img(src, alt = '') { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" decoding="async" onload="this.classList.add('ok')">` : ''; }
+/** [first] = the main picture of the screen: fetched straight away at high priority (everything else waits until it's near). */
+function img(src, alt = '', first = false) { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" ${first ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" onload="this.classList.add('ok')">` : ''; }
 const badgesHTML = e => `${e && e.watched ? `<span class="watched" title="${T('Watched')}">${ic('check')}</span>` : ''}${e && e.pin ? `<span class="locked">${ic('lock')}</span>` : ''}`;
 function posterCard(x, i = 0, prog, cont) {
   const t = x.media_type || 'movie', e = libEntry(t, x.id);
@@ -953,6 +972,7 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 // ============================================================================ home
+const heroSrc = (x, wide) => wide ? IMG + 'w1280' + x.backdrop_path : IMG + 'w780' + (x.poster_path || x.backdrop_path);
 async function homeView(token) {
   view.innerHTML = `<div class="sk" style="height:min(560px,78vh);border-radius:0"></div>${skeletonRows()}`;
   const [trend, popM, popT, now, air, topM, topT] = await Promise.all([
@@ -964,7 +984,7 @@ async function homeView(token) {
   const wide = innerWidth >= 700;
   view.innerHTML = `
     <section class="hero">
-      <div class="hero-track" id="hero-track">${hero.map(x => `<div class="hero-slide">${img(wide ? IMG + 'w1280' + x.backdrop_path : IMG + 'w780' + (x.poster_path || x.backdrop_path), titleOf(x))}</div>`).join('')}</div>
+      <div class="hero-track" id="hero-track">${hero.map((x, i) => `<div class="hero-slide">${i === 0 ? img(heroSrc(x, wide), titleOf(x), true) : `<img data-src="${esc(heroSrc(x, wide))}" alt="${esc(titleOf(x))}" decoding="async" onload="this.classList.add('ok')">`}</div>`).join('')}</div>
       <div class="hero-info gutter" id="hero-info"></div>
     </section>
     ${rail('Continue Watching', cont, x => progressOf(libEntry(x.media_type, x.id)), true)}
@@ -975,7 +995,7 @@ async function homeView(token) {
   // hero carousel
   const track = $('#hero-track'), info = $('#hero-info');
   let idx = -1;
-  const show = i => {
+  let show = i => {
     if (i === idx || !hero[i]) return; idx = i; const x = hero[i];
     info.innerHTML = `<div class="hero-logo" id="hero-logo"></div><div class="meta hero-meta"><span>${esc(metaLine(x))}</span>${x.vote_average ? `<span class="star">★ ${x.vote_average.toFixed(1)}</span>` : ''}</div>
       ${wide ? `<p class="dim" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(x.overview)}</p>` : ''}
@@ -986,6 +1006,15 @@ async function homeView(token) {
     logoPath(x.media_type, x.id).then(path => { const box = $('#hero-logo'); if (box && idx === i) box.innerHTML = titleArt(path, titleOf(x)); });
   };
   hero.forEach(x => logoPath(x.media_type, x.id));   // ready before their slide
+  // The other slides' pictures download one step ahead of the carousel (all at once if you start swiping), so on a
+  // slow connection they don't compete with the first picture and the rows below.
+  const slideImg = i => { const im = track.children[i]?.querySelector('img[data-src]'); if (im) { im.src = im.dataset.src; im.removeAttribute('data-src'); } };
+  const first = track.querySelector('img');
+  const ahead = () => slideImg(1);
+  first && !first.complete ? first.addEventListener('load', ahead, { once: true }) : ahead();
+  track.addEventListener('pointerdown', () => hero.forEach((_, i) => slideImg(i)), { once: true, passive: true });
+  const show0 = show;
+  show = i => { slideImg(i); if (i > 0) slideImg(i + 1); show0(i); };   // slide 1 itself waits for the first picture (above)
   show(0);
   track.addEventListener('scroll', () => show(Math.round(track.scrollLeft / track.clientWidth)), { passive: true });
   const timer = setInterval(() => {
@@ -1139,8 +1168,8 @@ function chCard(ch, i, favs) {
   return `<button class="ch" data-i="${i}"><span class="ch-logo">${ch.logo ? `<img src="${esc(ch.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<b class="ch-ph">${esc(cleanName(ch.name).replace(/[^\p{L}\p{N}]/gu, '').slice(0, 3).toUpperCase())}</b><span class="ch-live">${T('LIVE')}</span>${favs.has(ch.url) ? `<span class="ch-fav">${ic('star')}</span>` : ''}</span>
     <span class="ch-name">${esc(cleanName(ch.name))}</span>${sub ? `<span class="dim ch-sub">${esc(sub)}</span>` : ''}</button>`;
 }
-function bindChannels(box, list) {
-  box.querySelectorAll('.ch').forEach(b => {
+function bindChannels(box, list, from = 0) {
+  [...box.querySelectorAll('.ch')].slice(from).forEach(b => {
     let t = null, long = false;
     b.onpointerdown = () => { long = false; t = setTimeout(() => { long = true; toggleFav(list[+b.dataset.i], b.querySelector('.ch-logo')); }, 550); };
     b.onpointerup = b.onpointerleave = () => clearTimeout(t);
@@ -1248,6 +1277,7 @@ async function mountMatches(box) {
 
 /** Live TV tab: favourites, recently watched, countries (Kuwait first), categories and your playlists — all animated. */
 async function liveTvView(token) {
+  if (needsHls('x.m3u8')) setTimeout(() => needLib('hls'), 1500);   // channels are HLS: have the player library ready before one is picked
   const favs = (S.favs || []).map(savedToCh), recents = (S.recents || []).map(savedToCh), favSet = new Set((S.favs || []).map(x => x.url));
   const cols = [['#2563EB', '#0B1E45'], ['#9333EA', '#2A0B45'], ['#0D9488', '#052A26'], ['#EA580C', '#3A1505']];
   view.innerHTML = `<div class="sports-head tv-head"><div class="gutter"><h1>${ic('livetv')} ${T('Live TV')}</h1><p class="dim">${T('Free channels from the Gulf and the Arab world, plus your own playlists')}</p></div></div>
@@ -1292,14 +1322,25 @@ async function channelsView(kind, key, token) {
   let group = null, q = '';
   $('#ch-tools').innerHTML = `${all.length > 12 ? `<div class="gutter" style="margin-top:14px"><input class="field" id="ch-q" type="search" placeholder="${T('Search channels')}"></div>` : ''}
     ${groups.length > 1 ? `<div class="gutter chips" id="ch-g"><button class="chip on" data-g="">${T('All')} ${all.length}</button>${groups.map(g => `<button class="chip" data-g="${esc(g)}">${esc(T(g))}</button>`).join('')}</div>` : ''}`;
+  // Big playlists have thousands of channels: show them 120 at a time, the next batch well before you reach the end
+  let io = null;
   const draw = () => {
     const favSet = new Set((S.favs || []).map(x => x.url));
     const list = all.filter(ch => (!group || ch.groups.includes(group)) && (!q || ch.name.toLowerCase().includes(q)));
-    const box = $('#ch-grid');
-    box.innerHTML = list.length ? list.map((ch, i) => chCard(ch, i, favSet)).join('') : `<p class="dim">${T(q ? 'Try a different name.' : 'This list has no channels right now.')}</p>`;
-    bindChannels(box, list);
+    const box = $('#ch-grid'); io?.disconnect();
+    if (!list.length) { box.innerHTML = `<p class="dim">${T(q ? 'Try a different name.' : 'This list has no channels right now.')}</p>`; return; }
+    box.innerHTML = ''; let shown = 0;
+    const more = () => {
+      const from = shown; shown = Math.min(list.length, shown + 120);
+      box.insertAdjacentHTML('beforeend', list.slice(from, shown).map((ch, j) => chCard(ch, from + j, favSet)).join(''));
+      bindChannels(box, list, from);
+      if (shown < list.length) io.observe(box.lastElementChild);
+    };
+    io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); more(); } }), { rootMargin: '1200px 0px' });
+    more();
   };
-  $('#ch-q')?.addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); draw(); });
+  let qt;
+  $('#ch-q')?.addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { q = e.target.value.trim().toLowerCase(); draw(); }, 150); });
   $('#ch-g')?.querySelectorAll('.chip').forEach(b => b.onclick = () => { $('#ch-g').querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); group = b.dataset.g || null; draw(); });
   draw();
 }
@@ -1537,6 +1578,19 @@ async function streamsView(type, id, season, episode, token) {
   draw();
 }
 
+// ============================================================================ scripts loaded only when needed
+/** hls.js (live channels in Chrome / Android) and the QR library (watch party invite) download on first use, not on every visit. */
+const LIBS = { hls: 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js', qr: 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js' };
+const libLoads = {};
+function needLib(k) {
+  return libLoads[k] || (libLoads[k] = new Promise(res => {
+    const sc = document.createElement('script'); sc.src = LIBS[k]; sc.async = true; sc.crossOrigin = 'anonymous';
+    sc.onload = () => res(true); sc.onerror = () => { delete libLoads[k]; res(false); };
+    document.head.appendChild(sc);
+  }));
+}
+const needsHls = url => /\.m3u8(\?|$)/i.test(url) && !document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
+
 // ============================================================================ little moments (same as the apps)
 /** A star / heart flies from the middle of the screen (where menus open) — or out of the card — to the card. */
 function flyTo(target, glyph, colour, corner) {
@@ -1750,9 +1804,12 @@ function openPlayer() {
   const st = { segs: [], filters: store.get('filters', {})[titleKey(r)] || [], handled: new Set(), markStart: null, size: 0, subs: [] };
   PLAYER.st = st;
 
-  if (/\.m3u8(\?|$)/i.test(r.url) && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
-    PLAYER.hls = new Hls(); PLAYER.hls.loadSource(r.url); PLAYER.hls.attachMedia(v);
-  } else v.src = r.url;
+  if (needsHls(r.url)) needLib('hls').then(ok => {
+    if (PLAYER.v !== v) return;
+    if (ok && window.Hls && Hls.isSupported()) { PLAYER.hls = new Hls(); PLAYER.hls.loadSource(r.url); PLAYER.hls.attachMedia(v); } else v.src = r.url;
+    v.play().catch(() => { /* user taps play */ });
+  });
+  else v.src = r.url;
   v.addEventListener('loadedmetadata', () => {
     if (r.start) v.currentTime = r.start / 1000;
     if (r.id && !r.local) introSegments(r.type, r.id, r.season, r.episode, v.duration * 1000).then(s => { st.segs = s; st.introLoaded = true; });
@@ -3005,7 +3062,7 @@ function partySheet() {
       <b>${T('Join with a code')}</b><form id="pjoin" class="prow"><input class="field" id="pjc" placeholder="ABC123" maxlength="8" autocapitalize="characters" autocomplete="off"><button class="btn tonal">${T('Join')}</button></form></div>`
     : `<div class="pbody">
       <div class="pcode"><div><small class="dim">${T('Party code')}</small><b>${esc(PARTY.code.replace(/(.{3})/, '$1 '))}</b><small class="acc">${isHost() ? T("You're the host") : T('Host') + ': ' + esc(pName(PARTY.hostId))}</small></div>
-        ${window.qrcode ? (() => { const q = qrcode(0, 'M'); q.addData(inviteUrl()); q.make(); return `<span class="pqr">${q.createSvgTag({ cellSize: 3, margin: 2, scalable: true })}</span>`; })() : ''}</div>
+        ${window.qrcode || (needLib('qr'), false) ? (() => { const q = qrcode(0, 'M'); q.addData(inviteUrl()); q.make(); return `<span class="pqr">${q.createSvgTag({ cellSize: 3, margin: 2, scalable: true })}</span>`; })() : ''}</div>
       <button class="btn tonal" id="pshare">${ic('open')}${T('Share invite')}</button>
       <div class="preacts">${REACTS.map(e => `<button data-re="${e}">${e}</button>`).join('')}</div>
       ${isHost() ? PARTY.requests.map(m => `<div class="preq">${esc(m.name)} ${T('asks for control')} <button data-give="${esc(m.id)}">${T('Allow')}</button></div>`).join('') : ''}
