@@ -642,11 +642,30 @@ async function getJSON(url, timeout = 15000) {
   finally { clearTimeout(tm); }
 }
 const cache = new Map();
+/** Arabic: the story, tagline and biography in Arabic wherever TMDB has them (titles stay English, like the apps). */
+const AR_FIELDS = ['overview', 'tagline', 'biography'], NO_TEXT = /\/(images|videos|release_dates|content_ratings|keywords|external_ids|watch\/providers)/;
+function arText(en, ar) {
+  if (Array.isArray(en)) {
+    const by = new Map((Array.isArray(ar) ? ar : []).filter(x => x && x.id != null).map(x => [x.id, x]));
+    return en.map((x, i) => arText(x, x && x.id != null ? by.get(x.id) : ar?.[i]));
+  }
+  if (en && typeof en === 'object') {
+    for (const k of Object.keys(en)) {
+      const v = ar?.[k];
+      if (AR_FIELDS.includes(k) && typeof v === 'string' && v.trim()) en[k] = v;
+      else if (en[k] && typeof en[k] === 'object') en[k] = arText(en[k], v);
+    }
+  }
+  return en;
+}
 function tmdb(path) {
   const key = (S.tmdbKey || '').trim() || BUILT_IN_TMDB_KEY;
   const url = `https://api.themoviedb.org/3/${path}${path.includes('?') ? '&' : '?'}api_key=${key}&language=en-US`;
-  if (!cache.has(url)) cache.set(url, getJSON(url).catch(e => { cache.delete(url); throw e; }));
-  return cache.get(url);
+  const ar = S.lang === 'ar' && !NO_TEXT.test(path), ck = ar ? url + '#ar' : url;
+  if (!cache.has(ck)) cache.set(ck, (ar
+    ? Promise.all([getJSON(url), getJSON(url.replace('language=en-US', 'language=ar')).catch(() => null)]).then(([e, a]) => a ? arText(e, a) : e)
+    : getJSON(url)).catch(e => { cache.delete(ck); throw e; }));
+  return cache.get(ck);
 }
 const typed = (list, type) => (list || []).map(x => Object.assign(x, { media_type: x.media_type || type })).filter(x => x.media_type === 'movie' || x.media_type === 'tv');
 const api = {
