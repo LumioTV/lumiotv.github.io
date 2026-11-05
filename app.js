@@ -959,14 +959,35 @@ const view = $('#view');
 let routeToken = 0;
 const TABS = [['home', 'Home', 'home'], ['livetv', 'Live TV', 'livetv'], ['search', 'Search', 'search'], ['library', 'Library', 'library'], ['settings', 'Profile', 'avatar']];
 const scrollMemo = {};
+/**
+ * Bottom bar: a lamp on the bar's top edge shines down on the open tab (theme colour) and glides to the next one.
+ * Built once and updated in place, so the lamp can slide instead of jumping.
+ */
 function renderNav(active) {
   const nav = $('#nav');
   // the Profile tab shows your picture (like the phone app and Nuvio)
-  const me = activeProfile();
-  nav.innerHTML = TABS.map(([k, l, i]) => `<a class="nav-item ${k === active ? 'on' : ''} ${i === 'avatar' ? 'nav-me' : ''}" href="#/${k}" aria-label="${T(l)}">${i === 'avatar' ? avatarHTML(me.avatar, me.avatarUrl, 26) : ic(i)}<span class="lbl">${T(l)}</span></a>`).join('');
+  const me = activeProfile(), sig = [S.lang, me.avatar, me.avatarUrl].join('|');
+  const fresh = nav.dataset.sig !== sig;
+  if (fresh) {
+    nav.dataset.sig = sig;
+    nav.innerHTML = `<i class="nav-lamp" aria-hidden="true"></i>` + TABS.map(([k, l, i]) => `<a class="nav-item ${i === 'avatar' ? 'nav-me' : ''}" data-k="${k}" href="#/${k}" aria-label="${T(l)}" title="${T(l)}">${i === 'avatar' ? avatarHTML(me.avatar, me.avatarUrl, 26) : ic(i)}</a>`).join('');
+  }
+  nav.querySelectorAll('.nav-item').forEach(a => { const on = a.dataset.k === active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
   nav.classList.toggle('hidden', !active);
   view.classList.toggle('no-nav', !active);
+  placeLamp(nav, fresh || !nav.dataset.lit);
 }
+function placeLamp(nav, instant) {
+  const lamp = $('.nav-lamp', nav), on = $('.nav-item.on', nav);
+  if (!lamp) return;
+  if (!on) { lamp.style.opacity = 0; return; }
+  if (instant) lamp.style.transition = 'none';
+  lamp.style.opacity = 1;
+  lamp.style.transform = `translateX(${on.offsetLeft + on.offsetWidth / 2}px)`;
+  nav.dataset.lit = '1';
+  if (instant) { void lamp.offsetWidth; lamp.style.transition = ''; }
+}
+addEventListener('resize', () => { const n = $('#nav'); if (n) placeLamp(n, true); });
 let lastHash = '';
 async function route() {
   if (!SESSION) { loginView(); return; }
