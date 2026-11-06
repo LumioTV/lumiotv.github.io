@@ -749,6 +749,7 @@ const metaLine = x => [T(x.media_type === 'tv' || x.first_air_date ? 'Series' : 
  */
 function mountTrailer(box, key, { muted = true, loop = false, controls = false, onPlay, onFail, onEnd, onSound } = {}) {
   const f = document.createElement('iframe');
+  if (PLAYER.el) return { el: f, cmd() { }, setSound() { }, stop() { } };   // a movie is playing: no trailer starts behind it
   f.className = 'yt'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
   // Always starts muted: every browser lets a muted video play by itself, while Safari (iPhone and Mac) freezes a
   // trailer that tries to start with sound. The sound is turned on right after it starts moving, if the browser allows.
@@ -764,6 +765,7 @@ function mountTrailer(box, key, { muted = true, loop = false, controls = false, 
     const state = d.event === 'onStateChange' ? d.info : d.event === 'infoDelivery' ? d.info?.playerState : undefined;
     const recent = soundAt && performance.now() - soundAt < 2500;
     if (d.event === 'onError') { removeEventListener('message', onMsg); f.remove(); onFail && onFail(); }
+    else if (state === 1 && PLAYER.el) { removeEventListener('message', onMsg); f.remove(); return; }   // a movie started meanwhile
     else if (state === 1 && !played) { played = true; f.classList.add('on'); onPlay && onPlay(); if (wantSound) trySound(); }
     else if (state === 2 && recent) blocked();                                   // the browser paused it for having sound
     else if (state === 0) { f.classList.remove('on'); onEnd && onEnd(); }
@@ -847,12 +849,19 @@ function streamScore(s, orig) {
   if (/\b(CAM|HDCAM|TS|TELESYNC|HDTS|TC)\b/.test(up)) sc -= 900;
   if (s.h === 'Dolby Vision') sc += /HDR/.test(up) ? 25 : 0; else if (s.h) sc += 20;
   if (/\bMKV\b|\.MKV/.test(up) && isIOS()) sc -= 150;            // Safari can't play MKV
-  sc += { 'Dolby Atmos': 24, 'Dolby TrueHD': 20, 'DTS:X': 20, 'DTS-HD MA': 16, 'Dolby Digital+': 12, 'Dolby Digital': 8 }[s.a] || 0;
+  // Sound the browser can actually play: no browser decodes DTS or TrueHD, and only Safari (Apple) decodes Dolby
+  // Digital / Digital+ / Atmos — elsewhere those play as a silent picture. AAC / Opus / MP3 play everywhere.
+  const dts = /\bDTS\b|DTS-HD|DTS:X/.test(up) || s.a === 'DTS:X' || s.a === 'DTS-HD MA', truehd = s.a === 'Dolby TrueHD' || /TRUE-?HD/.test(up);
+  const dolby = ['Dolby Atmos', 'Dolby Digital+', 'Dolby Digital'].includes(s.a);
+  if (dts || truehd) sc -= 700;
+  else if (dolby) sc += SAFARI ? 10 : -700;
+  if (/\bAAC\b|\bOPUS\b|\bMP3\b/.test(up)) sc += 60;
   sc += Math.min(s.gb || 0, 60) / 6;
   const seeds = +((text.match(/👤\s*(\d+)/) || [])[1] ?? NaN);
   if (!isNaN(seeds)) sc += Math.min(seeds, 200) / 20 - (seeds === 0 ? 120 : 0);
   return sc;
 }
+const SAFARI = /^((?!chrome|chromium|crios|android|fxios|edg|opr).)*safari/i.test(navigator.userAgent);
 const rankStreams = (list, orig) => list.map(s => [s, streamScore(s, orig)]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 const AUDIO_RANK = ['Dolby Atmos', 'Dolby TrueHD', 'DTS:X', 'DTS-HD MA', 'Dolby Digital+', 'Dolby Digital'];
 const audioTag = s => { s = s.toUpperCase();
@@ -1735,11 +1744,12 @@ async function quickPlay(type, id, season, episode) {
     $('#qp-t', card).textContent = titleOf(d) + (season != null ? `  ·  S${season} • E${episode}` : '');
     const imdb = d.imdb_id || d.external_ids?.imdb_id;
     if (!imdb || !S.addons.some(a => supports(a, 'stream'))) return manual();
-    const best = rankStreams(await getStreams(type, imdb, season, episode), d.original_language)[0];
+    const ranked = rankStreams(await getStreams(type, imdb, season, episode), d.original_language), best = ranked[0];
     if (my !== QP) return;
     if (!best) return manual('No stream found — choose one yourself');
     done();
-    startPlayer({ url: best.url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path, addon: best.addon });
+    startPlayer({ url: best.url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path, addon: best.addon,
+      alts: [...new Map(ranked.filter(x => x.url !== best.url).map(x => [x.url, { url: x.url, addon: x.addon }])).values()].slice(0, 3) });
   } catch { manual(); }
 }
 /** Click = [tap]; touch-and-hold or right-click = [hold] (used for Play buttons and episodes). */
@@ -1802,7 +1812,8 @@ const segLabel = k => ({ intro: 'Skip Intro', recap: 'Skip Recap', credits: 'Ski
 
 function startPlayer(req) {
   const e = libEntry(req.type, req.id);
-  req.start = e && e.season == req.season && e.episode == req.episode && isContinue(e) ? e.pos : 0;
+  req.start = req.resumeAt != null ? req.resumeAt * 1000 : e && e.season == req.season && e.episode == req.episode && isContinue(e) ? e.pos : 0;
+  delete req.resumeAt;
   PLAYER.req = req;
   if (location.hash !== '#/play') location.hash = '#/play';
   openPlayer();
@@ -1829,8 +1840,14 @@ function saveProgress() {
     return e;
   });
 }
+/** Trailers stop when a video starts: the title page's own trailer, the hover card's and a full-screen one. */
+function stopPageTrailers() {
+  document.querySelectorAll('iframe.yt').forEach(f => { if (!f.closest('.player')) f.remove(); });
+  document.querySelectorAll('.pv-pop, .trailer-full').forEach(x => x.remove());
+}
 function openPlayer() {
   if (PLAYER.el) closePlayer(true, true); // switching episode: progress already saved
+  stopPageTrailers();
   const r = PLAYER.req;
   const el = document.createElement('div'); el.className = 'player';
   const live = r.type === 'live';
@@ -2165,9 +2182,17 @@ function openPlayer() {
   }
 
   // ---- tap / double-tap gestures
-  let lastTap = 0, tapT;
+  let lastTap = 0, tapT, pointer = 'touch';
+  el.addEventListener('pointerdown', e => { pointer = e.pointerType || 'mouse'; }, true);
   el.addEventListener('click', e => {
-    if (e.target.closest('button, .p-seek, .sheet, .p-err, .mark-chip')) return;
+    if (e.target.closest('button, .p-seek, .sheet, .p-err, .mark-chip, .upnext, .notyet')) return;
+    if (pointer === 'mouse') {
+      // computers: a click plays / pauses (the mouse already shows the controls), a double-click goes full screen
+      clearTimeout(tapT);
+      if (e.detail >= 2) { document.fullscreenElement ? document.exitFullscreen?.() : el.requestFullscreen?.().catch(() => { }); return; }
+      tapT = setTimeout(() => { v.paused ? v.play() : v.pause(); showUI(); }, 220);
+      return;
+    }
     const now = Date.now();
     if (now - lastTap < 300) { clearTimeout(tapT); lastTap = 0; seekBy(e.clientX < innerWidth / 2 ? -10 : 10); return; }
     lastTap = now;
@@ -2177,6 +2202,20 @@ function openPlayer() {
     const f = document.createElement('div'); f.className = 'flash'; f.style[s < 0 ? 'left' : 'right'] = '64px';
     f.innerHTML = `${ic(s < 0 ? 'rew' : 'fwd')}${s < 0 ? '-' : '+'}10s`; el.appendChild(f); setTimeout(() => f.remove(), 700);
   }
+  // Silent source (sound format this browser can't decode): after a few seconds of playing, switch to the next best
+  // source automatically, from the same moment (only when Play straight away had alternatives)
+  let soundChecked = false;
+  v.addEventListener('timeupdate', () => {
+    if (soundChecked || v.currentTime < 4 || !r.alts?.length || v.muted) return;
+    soundChecked = true;
+    const silent = (typeof v.webkitAudioDecodedByteCount === 'number' && v.webkitAudioDecodedByteCount === 0) || v.mozHasAudio === false
+      || (v.audioTracks && v.audioTracks.length === 0);
+    if (!silent) return;
+    const [next, ...rest] = r.alts;
+    toast('This source had no sound in your browser — trying another');
+    saveProgress();
+    startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, alts: rest, resumeAt: v.currentTime }));
+  });
   PLAYER.saveT = setInterval(saveProgress, 10000);
 }
 const LANG3 = { ar: ['ara'], en: ['eng'], fr: ['fre', 'fra'], es: ['spa'], de: ['ger', 'deu'], tr: ['tur'], it: ['ita'], pt: ['por', 'pob'], ru: ['rus'],
