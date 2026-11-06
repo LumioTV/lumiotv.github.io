@@ -2482,6 +2482,40 @@ async function signOut() {
   loginView();
 }
 
+/** Delete account: everything in it, on every device, for good (Lumio's server checks it's really you). */
+async function deleteAccount() {
+  if (!await askSure('Delete your account?', 'This deletes your Lumio account and everything saved in it — profiles, library, watch history, add-ons and settings — on every device. It can\'t be undone.', 'Delete forever')) return;
+  try {
+    const r = await fetch(`${SB_URL}/functions/v1/delete-account`, { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + await sbToken(), 'Content-Type': 'application/json' }, body: '{}' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch { return toast("Couldn't delete the account. Check your connection and try again."); }
+  closePlayer(true);
+  raw.del(cacheKey()); raw.del(baseKey()); raw.del(pushedKey()); raw.del('lumio.session'); SESSION = null; CD = {}; PROFILE_ID = MAIN; PROFILE_CHOSEN = false;
+  unlocked.clear(); loadProfileData(); applyTheme(); applyLang();
+  toast('Your account was deleted');
+  loginView();
+}
+
+/**
+ * Crash reports: errors on the website go to Lumio's crash log (table crash_reports — only you can read it, in the
+ * Supabase dashboard): the page version, browser and the error. No account, email or what you watched. Each
+ * different error once per visit, at most 5; harmless browser noise is skipped.
+ */
+(() => {
+  const seen = new Set();
+  const send = (msg, stack) => {
+    msg = String(msg || '').slice(0, 500);
+    if (!msg || /^Script error\.?$|ResizeObserver loop|AbortError|NetworkError|Failed to fetch|Load failed|NotAllowedError/i.test(msg) || seen.has(msg) || seen.size >= 5) return;
+    seen.add(msg);
+    const ver = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([\w]+)/) || [])[1] || '';
+    fetch(`${SB_URL}/rest/v1/crash_reports`, { method: 'POST', keepalive: true,
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ platform: 'web', app_version: ver.slice(0, 40), device: navigator.userAgent.slice(0, 120), os: (navigator.userAgentData?.platform || navigator.platform || '').slice(0, 60), message: msg, stack: String(stack || '').slice(0, 16000) }) }).catch(() => { });
+  };
+  addEventListener('error', e => send(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`));
+  addEventListener('unhandledrejection', e => send(e.reason?.message || e.reason, e.reason?.stack));
+})();
+
 // ---- Sign in a TV (page opened by scanning the QR code on Lumio TV)
 function tvLinkView() {
   renderNav(null); document.querySelectorAll('.welcome').forEach(x => x.remove());
@@ -2664,7 +2698,7 @@ function settingsView(page) {
     // Profile tab: just you — picture, name, email, Switch profile and Sign out (syncing happens on its own), then the settings
     view.innerHTML = `<div class="me-head gutter"><span class="me-av">${avatarHTML(p.avatar, p.avatarUrl, 104)}</span>
         <h1>${esc(p.name)}</h1><small class="dim">${esc(SESSION?.email || '')}</small>
-        <div class="row-btns"><button class="btn tonal" id="me-switch">${ic('user')}${T('Switch profile')}</button>${SESSION ? `<button class="btn outline" id="me-out">${ic('logout')}${T('Sign out')}</button>` : ''}</div></div>
+        <div class="row-btns"><button class="btn tonal" id="me-switch">${ic('user')}${T('Switch profile')}</button>${SESSION ? `<button class="btn outline" id="me-out">${ic('logout')}${T('Sign out')}</button>` : ''}</div>${SESSION ? `<button class="danger-link" id="me-del">${T('Delete account')}</button>` : ''}</div>
       <div class="gutter hub-wrap">
       <div class="hub-l">${T('General')}</div>
       <div class="card hub">${go('party')}${row('#/appearance', 'palette', '#A855F7', 'Appearance', T('Theme, title colour, Arabic font and app icon'))}${go('language')}${go('content')}${go('addons')}${go('playback')}${standalone ? '' : go('install')}</div>
@@ -2672,6 +2706,7 @@ function settingsView(page) {
       <div class="card hub">${go('about')}</div>
       <div style="height:30px"></div></div>`;
     $('#me-switch').onclick = () => profilesView();
+    $('#me-del') && ($('#me-del').onclick = deleteAccount);
     $('#me-out') && ($('#me-out').onclick = async () => { if (await askSure('Sign out?', 'Your library and settings stay saved in your account.', 'Sign out')) signOut(); });
     return;
   }
@@ -2700,7 +2735,7 @@ function settingsPage(page, standalone) {
     case 'account': return `<div class="card">
       <div class="set-row">${avatarHTML(activeProfile().avatar, activeProfile().avatarUrl, 48)}<div><b>${esc(activeProfile().name)}</b><small>${T(activeProfile().id === MAIN ? 'Main profile' : activeProfile().shareAddons ? "Uses the main profile's addons" : 'Own addon list')}</small></div><button class="btn tonal" id="pswitch" style="height:36px;padding:0 14px">${T('Switch profile')}</button></div>
       <div class="set-row"><span class="pin-ic">${ic('user')}</span><div><b>${esc(SESSION?.email || '')}</b><small>${T('Syncs automatically')}</small></div></div>
-      <div class="set-row" style="gap:10px"><button class="btn outline" id="signout" style="height:36px;padding:0 14px">${T('Sign out')}</button></div></div>`;
+      <div class="set-row" style="gap:10px"><button class="btn outline" id="signout" style="height:36px;padding:0 14px">${T('Sign out')}</button><button class="btn danger-link" id="delacct" style="height:36px;padding:0 14px">${T('Delete account')}</button></div></div>`;
     case 'party': return `<div class="card"><div class="set-row" style="display:block">${PARTY.code ? `<b>🎉 ${T('In party')} ${esc(PARTY.code)} · ${PARTY.members.length} ${T('watching')}</b>`
       : `<small>${T("Start a party from the player while watching (the 👥 button), or join a friend's with their code.")}</small>
       <form id="sjoin" class="prow" style="padding-top:10px"><input class="field" id="sjc" placeholder="ABC123" maxlength="8" autocapitalize="characters" autocomplete="off"><button class="btn acc">${T('Join')}</button></form>`}</div></div>`;
@@ -2766,6 +2801,7 @@ function bindSettings(page) {
   const re = () => settingsView();
   const on = (sel, ev, fn) => { const el = $(sel); if (el) el[ev] = fn; };
   on('#signout', 'onclick', signOut);
+  on('#delacct', 'onclick', deleteAccount);
   on('#pswitch', 'onclick', () => { PROFILE_CHOSEN = false; profilesView(); });
   view.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { S.lang = b.dataset.lang; saveSettings(); renderNav(null); re(); renderNav('settings'); });
   const toggle = (id, key) => on('#' + id, 'onclick', () => { S[key] = !S[key]; saveSettings(); re(); });

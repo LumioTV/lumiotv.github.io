@@ -962,3 +962,8 @@ img.kb.ok { opacity: 1; }
    they hold no GPU layers; the entrance animation keeps its finished state (same name first). Restarts before they come back. */
 .tile.anim-off { animation-name: tileIn, none; }
 .anim-off::before, .anim-off img.kb, .anim-off .slogo, .anim-off .slogo i, .anim-off .emoji, .section-h .bar.anim-off { animation: none; will-change: auto; }
+
+/* Delete account: quiet, red, never mistaken for the main buttons */
+.danger-link { background: none; color: #f87171; font-size: 13px; font-weight: 600; padding: 8px 12px; border-radius: 12px; margin-top: 6px; }
+.danger-link:hover, .danger-link:focus-visible { background: rgba(248,113,113,.12); }
+.btn.danger-link { border: 1px solid rgba(248,113,113,.35); margin-top: 0; }
