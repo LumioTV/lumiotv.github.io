@@ -280,7 +280,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--display); }
 .s-bolt { font-size: 15px; }
 .s-size { font-size: 16px; font-weight: 700; white-space: nowrap; }
 .stag { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.08); }
-.stag.q { background: rgba(255,255,255,.16); } .stag.hdr { background: #8A6D1F; } .stag.aud { background: #1F4E8A; } .stag.rmx { background: #5B2A86; }
+.stag.q { background: rgba(255,255,255,.16); } .stag.hdr { background: #8A6D1F; } .stag.aud { background: #1F4E8A; } .stag.rmx { background: #5B2A86; } .stag.imax { background: #0F6B78; letter-spacing: .04em; }
 .s-line { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 13px; color: rgba(255,255,255,.75); }
 .s-line > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-flags { white-space: nowrap; }

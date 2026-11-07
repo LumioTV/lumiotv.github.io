@@ -932,5 +932,8 @@ window.LUMIO_AR = {
 "Nudity": "عُري",
 "Alcohol & smoking": "كحول وتدخين",
 "Frightening scenes": "مشاهد مخيفة",
-"Self-harm": "إيذاء النفس"
+"Self-harm": "إيذاء النفس",
+"IMAX": "IMAX",
+"Whole picture, full width – best for IMAX here": "الصورة كاملة بعرض الشاشة – الأفضل لـ IMAX هنا",
+"Fills screen, cuts off a lot of the sides": "تملأ الشاشة لكنها تقص جزءًا كبيرًا من الجانبين"
 };

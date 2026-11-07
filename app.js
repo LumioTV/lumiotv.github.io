@@ -827,6 +827,10 @@ async function fetchManifest(url) {
     version: m.version || '', description: m.description || null, logo: m.logo || null };
 }
 const quality = s => { s = s.toUpperCase(); return /2160|4K|UHD/.test(s) ? '4K' : /1080/.test(s) ? '1080p' : /720/.test(s) ? '720p' : ''; };
+/** IMAX version: a taller picture (1.90:1 instead of 2.39:1, some scenes full-frame), so it fills more of the screen. */
+const imax = s => /\bIMAX\b/i.test(s);
+// Screens closer to square (Fold inner display, iPad, a narrow window) gain the most picture from an IMAX version.
+const squareScreen = () => Math.max(innerWidth, innerHeight) / Math.max(1, Math.min(innerWidth, innerHeight)) < 1.5;
 const hdr = s => { s = s.toUpperCase(); return /DOLBY VISION|\bDV\b|DOVI/.test(s) ? 'Dolby Vision' : /HDR10\+/.test(s) ? 'HDR10+' : /HDR/.test(s) ? 'HDR' : ''; };
 /**
  * Best stream first (same rules as the apps): the title's original sound — never a dubbed-only copy (Polish lektor,
@@ -848,6 +852,7 @@ function streamScore(s, orig) {
   sc += { '4K': 260, '1080p': 200, '720p': 110 }[s.q] ?? 70;
   if (/\b(CAM|HDCAM|TS|TELESYNC|HDTS|TC)\b/.test(up)) sc -= 900;
   if (s.h === 'Dolby Vision') sc += /HDR/.test(up) ? 25 : 0; else if (s.h) sc += 20;
+  if (s.imax) sc += squareScreen() ? 40 : 15;                     // more picture; never outranks a sharper resolution
   if (/\bMKV\b|\.MKV/.test(up) && isIOS()) sc -= 150;            // Safari can't play MKV
   // Sound the browser can actually play: no browser decodes DTS or TrueHD, and only Safari (Apple) decodes Dolby
   // Digital / Digital+ / Atmos — elsewhere those play as a silent picture. AAC / Opus / MP3 play everywhere.
@@ -891,7 +896,7 @@ async function getStreams(type, imdb, season, episode) {
     getJSON(`${addonBase(a)}/stream/${st}/${id}.json`).then(r => (r.streams || []).filter(x => x.url).map(x => {
       const label = (x.name || a.name).replace(/\n/g, ' '), details = [x.title, x.description].filter(Boolean).join('\n');
       const all = label + ' ' + details;
-      return { addon: a.name, label, details, url: x.url, q: quality(all), h: hdr(all), a: audioTag(all), gb: sizeGb(all) };
+      return { addon: a.name, label, details, url: x.url, q: quality(all), h: hdr(all), a: audioTag(all), gb: sizeGb(all), imax: imax(all) };
     })).catch(() => [])));
   // Best picture first, then the richest sound, then the biggest file (more bitrate at the same resolution)
   const rank = s => ({ '4K': 0, '1080p': 1, '720p': 2 }[s.q] ?? 3) * 100 + ({ 'Dolby Vision': 0, 'HDR10+': 1, HDR: 2 }[s.h] ?? 3) * 10 + (s.a ? AUDIO_RANK.indexOf(s.a) : 7);
@@ -1620,14 +1625,14 @@ async function streamsView(type, id, season, episode, token) {
   if (!streams.length) { list.innerHTML = msg('No streams', 'Your addons returned no streams for this title.'); return; }
   let filter = 'All';
   const filters = ['All', ...new Set(streams.map(s => s.addon)), ...new Set(streams.map(s => s.q).filter(Boolean)),
-    ...(streams.some(s => s.h === 'Dolby Vision') ? ['Dolby Vision'] : []), ...(streams.some(s => s.a === 'Dolby Atmos') ? ['Atmos'] : [])];
+    ...(streams.some(s => s.imax) ? ['IMAX'] : []), ...(streams.some(s => s.h === 'Dolby Vision') ? ['Dolby Vision'] : []), ...(streams.some(s => s.a === 'Dolby Atmos') ? ['Atmos'] : [])];
   const tag = (t, cls = '') => `<span class="stag ${cls}">${esc(T(t))}</span>`;
   const card = (s, i) => {
     const n = srcInfo(s);
     const line = [n.codec, n.channels && `${n.channels} ch`, n.multi && T('Multi audio'), n.seeds && `${n.seeds} ${T('seeds')}`].filter(Boolean).join('  ·  ');
     const mkv = /\.(mkv|avi)(\?|$)/i.test(s.url) || /\bmkv\b/i.test(s.details);
     return `<button class="source fly" style="animation-delay:${Math.min(i, 10) * 25}ms" data-i="${streams.indexOf(s)}">
-      <div class="s-top">${n.instant ? '<span class="s-bolt">⚡</span>' : ''}<span class="s-tags">${s.q ? tag(s.q, 'q') : ''}${s.h ? tag(s.h, 'hdr') : ''}${s.a ? tag(s.a, 'aud') : ''}${n.source ? tag(n.source, n.source === 'Remux' ? 'rmx' : '') : ''}</span>${n.size ? `<b class="s-size">${esc(n.size)}</b>` : ''}</div>
+      <div class="s-top">${n.instant ? '<span class="s-bolt">⚡</span>' : ''}<span class="s-tags">${s.q ? tag(s.q, 'q') : ''}${s.imax ? tag('IMAX', 'imax') : ''}${s.h ? tag(s.h, 'hdr') : ''}${s.a ? tag(s.a, 'aud') : ''}${n.source ? tag(n.source, n.source === 'Remux' ? 'rmx' : '') : ''}</span>${n.size ? `<b class="s-size">${esc(n.size)}</b>` : ''}</div>
       <div class="s-line"><span>${esc(line || s.label)}</span>${n.flags.length ? `<span class="s-flags">${n.flags.slice(0, 5).join(' ')}${n.flags.length > 5 ? ` +${n.flags.length - 5}` : ''}</span>` : ''}</div>
       <div class="s-from">${esc([s.addon, n.site].filter(Boolean).join('  ·  '))}${n.file ? `<span>${esc(n.file)}</span>` : ''}</div>
       ${mkv ? `<div class="warn">${T('MKV file: Safari may not play it. Use “Open in…” in the player for Infuse or VLC.')}</div>` : ''}</button>`;
@@ -1635,7 +1640,7 @@ async function streamsView(type, id, season, episode, token) {
   const draw = () => {
     $('#sfil').innerHTML = filters.map(f => `<button class="chip sm ${f === filter ? 'on' : ''}">${esc(T(f))}</button>`).join('');
     $('#sfil').querySelectorAll('.chip').forEach((b, i) => b.onclick = () => { filter = filters[i]; draw(); });
-    const shown = streams.filter(s => filter === 'All' || (filter === 'Dolby Vision' ? s.h === filter : filter === 'Atmos' ? s.a === 'Dolby Atmos' : s.addon === filter || s.q === filter));
+    const shown = streams.filter(s => filter === 'All' || (filter === 'IMAX' ? s.imax : filter === 'Dolby Vision' ? s.h === filter : filter === 'Atmos' ? s.a === 'Dolby Atmos' : s.addon === filter || s.q === filter));
     list.innerHTML = shown.map(card).join('');
     list.querySelectorAll('.source').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon }); });
   };
