@@ -3265,16 +3265,24 @@ function playIntro() {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     sessionStorage.setItem('lumio.intro', '1');
   } catch { return; }
-  const wide = innerWidth > innerHeight;
+  let wide = innerWidth > innerHeight;
+  const src = () => `intro-${wide ? 'landscape' : 'portrait'}.mp4?v=midnight`;
   const box = document.createElement('div'); box.className = 'intro';
-  box.innerHTML = `<video playsinline preload="auto" src="intro-${wide ? 'landscape' : 'portrait'}.mp4?v=midnight"></video>`;
+  box.innerHTML = `<video playsinline preload="auto" src="${src()}"></video>`;
   document.body.appendChild(box);
   const v = box.querySelector('video');
   let gone = false;
+  // Turned the screen mid-animation → the version for the new shape, from the same moment (no zoomed-in middle)
+  const turn = () => {
+    if (gone || (innerWidth > innerHeight) === wide) return;
+    wide = !wide; const at = v.currentTime;
+    v.src = src(); v.addEventListener('loadedmetadata', () => { v.currentTime = at; v.play().catch(() => {}); }, { once: true });
+  };
+  addEventListener('resize', turn);
   const done = () => {
     if (gone) return; gone = true; v.pause();
     box.classList.add('out'); setTimeout(() => box.remove(), 340);
-    removeEventListener('keydown', done, true);
+    removeEventListener('keydown', done, true); removeEventListener('resize', turn);
   };
   v.onended = done; v.onerror = done;
   box.addEventListener('pointerdown', done);
