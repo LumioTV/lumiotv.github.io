@@ -470,7 +470,71 @@ function rememberSynced(at, data) {
   raw.set(baseKey(), BASE); raw.set(pushedKey(), lastPushed); raw.set('lumio.lastSync', Date.now());
 }
 const serial = fn => { const run = () => fn(); const p = syncChain.then(run, run); syncChain = p.catch(() => {}); return p; };
-function mergeCD(remote, local) {
+// Settings are combined setting by setting against the copy both sides last agreed on (same rules as the phone and TV
+// apps): what only this browser changed stays, what only another device changed is taken, and when both changed the
+// same setting the cloud's wins. Lists of named things (favourite channels, My List, playlists, add-ons, match
+// reminders, followed teams) are combined item by item. It used to be "the cloud's copy wins", which undid a change
+// made here whenever another device (a TV playing a film saves its place every few seconds) had uploaded meanwhile.
+const SYNC_LIST_IDS = { favChannels: o => o.url, recentChannels: o => o.url, favVod: o => `${o.src}:${o.kind}:${o.id}`, iptvSources: o => o.id, matchAlerts: o => o.id, followedTeams: o => o.id, addons: o => o.manifestUrl };
+const SYNC_DEVICE_FIELDS = ['layoutMode', 'layoutChosen', 'navPosition'];   // each device's own screen setup: passed through untouched
+const canon = x => JSON.stringify(x, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((o, key) => (o[key] = v[key], o), {}) : v);
+const sameJson = (x, y) => canon(x) === canon(y);
+function mergeSettingList(f, r, l, a) {
+  const id = SYNC_LIST_IDS[f];
+  const index = x => { const m = new Map(); for (const e of x || []) { const k = e && typeof e === 'object' ? id(e) : null; if (k != null && !m.has(k)) m.set(k, e); } return m; };
+  const ri = index(r), li = index(l), ai = index(a), out = [];
+  for (const [k, x] of ri) {
+    const y = li.get(k), z = ai.get(k);
+    if (y !== undefined) out.push(sameJson(y, z) ? x : sameJson(x, z) ? y : x);   // on both: whichever changed it (the cloud's if both did)
+    else if (z === undefined) out.push(x);                                         // new on the other device
+    // else: it was there, and this browser removed it → stays removed
+  }
+  const mine = [...li].filter(([k]) => !ri.has(k) && !ai.has(k)).map(([, e]) => e);   // new here (not something the other device removed)
+  return f === 'recentChannels' ? mine.concat(out) : out.concat(mine);
+}
+function pickSetting(f, rv, lv, av) {
+  if (sameJson(lv, av)) return rv;            // not touched here → the other device's value
+  if (sameJson(rv, av)) return lv;            // only changed here → keep ours
+  if (sameJson(rv, lv)) return rv;
+  const isArr = x => x === undefined || x === null || Array.isArray(x);
+  const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+  if (SYNC_LIST_IDS[f] && isArr(rv) && isArr(lv)) return mergeSettingList(f, rv || [], lv || [], Array.isArray(av) ? av : null);
+  if ((isObj(rv) || isObj(lv)) && (rv == null || isObj(rv)) && (lv == null || isObj(lv))) {   // a table: entry by entry
+    const ro = rv || {}, lo = lv || {}, ao = isObj(av) ? av : {}, m = {};
+    for (const k of new Set(Object.keys(ro).concat(Object.keys(lo)))) {
+      const x = ro[k], y = lo[k], z = ao[k];
+      const v = sameJson(y, z) ? x : sameJson(x, z) ? y : (x !== undefined ? x : y);
+      if (v !== undefined) m[k] = v;
+    }
+    return m;
+  }
+  return rv;                                   // a plain value both changed → the cloud's
+}
+/** @param agreed the settings both sides last agreed on (null = unknown: the cloud's copy wins, add-ons united) */
+function mergeSettings(r, l, agreed) {
+  const out = Object.assign({}, r);
+  if (agreed) for (const f of new Set(Object.keys(r).concat(Object.keys(l), Object.keys(agreed)))) {
+    if (SYNC_DEVICE_FIELDS.includes(f) || f === 'recentVod' || f === 'hiddenVod') continue;
+    const v = pickSetting(f, r[f], l[f], agreed[f]);
+    if (v === undefined) delete out[f]; else out[f] = v;
+  }
+  // provider "Recently watched": newest copy per title from either side, minus titles removed after they were watched
+  const hid = Object.assign({}, r.hiddenVod || {});
+  for (const [key, t] of Object.entries(l.hiddenVod || {})) hid[key] = Math.max(hid[key] || 0, t);
+  if (Object.keys(hid).length || l.recentVod) {
+    const vk = v => `${v.src}:${v.kind}:${v.id}`, m = new Map();
+    for (const v of (r.recentVod || []).concat(l.recentVod || [])) { const c = m.get(vk(v)); if (!c || (v.at || 0) > (c.at || 0)) m.set(vk(v), v); }
+    out.recentVod = [...m.values()].filter(v => (hid[vk(v)] ?? -1) < (v.at || 0)).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
+    out.hiddenVod = hid;
+  }
+  if (!agreed) {   // nothing agreed yet (first sync in this browser): keep every add-on from both sides
+    const ra = Array.isArray(r.addons) ? r.addons : [], la = Array.isArray(l.addons) ? l.addons : [];
+    const extra = la.filter(a => !ra.some(x => x.manifestUrl === a.manifestUrl));
+    if (extra.length) out.addons = ra.concat(extra);
+  }
+  return out;
+}
+function mergeCD(remote, local, agreed) {
   const out = Object.assign({}, remote);
   for (const [k, lv] of Object.entries(local)) {
     const rv = remote[k];
@@ -492,20 +556,11 @@ function mergeCD(remote, local) {
           o[key] = (r[key] || []).concat(l[key] || []).filter(x => { const id = x.startMs + ':' + x.endMs; if (seen.has(id)) return false; seen.add(id); return true; }).sort((a, b) => a.startMs - b.startMs);
         }
         out[k] = JSON.stringify(o);
-      } else if (k.startsWith('settings')) {   // cloud wins, but keep every addon from every device
-        const r = JSON.parse(rv), l = JSON.parse(lv);
-        // provider "Recently watched": newest copy per title from either side, minus titles removed after they were watched
-        const hid = Object.assign({}, r.hiddenVod || {});
-        for (const [key, t] of Object.entries(l.hiddenVod || {})) hid[key] = Math.max(hid[key] || 0, t);
-        if (Object.keys(hid).length || l.recentVod) {
-          const vk = v => `${v.src}:${v.kind}:${v.id}`, m = new Map();
-          for (const v of (r.recentVod || []).concat(l.recentVod || [])) { const c = m.get(vk(v)); if (!c || (v.at || 0) > (c.at || 0)) m.set(vk(v), v); }
-          r.recentVod = [...m.values()].filter(v => (hid[vk(v)] ?? -1) < (v.at || 0)).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
-          r.hiddenVod = hid; out[k] = JSON.stringify(r);
-        }
-        const ra = Array.isArray(r.addons) ? r.addons : [], la = Array.isArray(l.addons) ? l.addons : [];
-        const extra = la.filter(a => !ra.some(x => x.manifestUrl === a.manifestUrl));
-        if (extra.length) { r.addons = ra.concat(extra); out[k] = JSON.stringify(r); }
+      } else if (k.startsWith('settings')) {
+        let base = null;
+        try { if (agreed && agreed[k]) base = JSON.parse(agreed[k]); } catch { /* no usable agreed copy */ }
+        const merged = JSON.stringify(mergeSettings(JSON.parse(rv), JSON.parse(lv), base));
+        if (!sameJson(JSON.parse(merged), JSON.parse(rv))) out[k] = merged;
       }
     } catch { /* keep the cloud's copy */ }
   }
@@ -550,7 +605,11 @@ async function cloudPullNow(combine) {
     let up = null;
     if (!combine && row.at === BASE) { if (changed) up = CD; }                 // only this browser changed
     else if (!combine && BASE && !changed) CD = row.data;                      // only other devices changed
-    else { CD = mergeCD(row.data, CD); if (JSON.stringify(CD) !== JSON.stringify(row.data)) up = CD; }   // both: combine
+    else {                                                                     // both: combine
+      let agreed = null;
+      try { if (!combine && BASE && lastPushed) agreed = JSON.parse(lastPushed); } catch { /* treat as a first sync */ }
+      CD = mergeCD(row.data, CD, agreed); if (JSON.stringify(CD) !== JSON.stringify(row.data)) up = CD;
+    }
     raw.set(cacheKey(), CD);
     if (!up) { rememberSynced(row.at, CD); return true; }
     if (await upload(up, row.at)) return true;
