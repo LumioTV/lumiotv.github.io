@@ -2,8 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Security: only Lumio's own scripts (and two pinned libraries) may run; nothing inside the page's markup can run script. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-li0j05BIH+pwg8aWU6rqtLggAVDBQjAoRrKyvHYFKWA='; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob: wss://rdkkkoypfkwjzceswhrq.supabase.co; font-src 'self' data:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <!-- Lumio moved to lumiotv.github.io: the old address forwards there (same page, keeps #/party/… links) -->
-<script>if (location.hostname === 'akalkandari.github.io') location.replace('https://lumiotv.github.io/' + location.search + location.hash);</script>
+<script>if (location.hostname === 'akalkandari.github.io') location.replace('https://lumiotv.github.io/' + location.search + location.hash);
+// Lumio is never shown inside another site's frame (that could trick a tap onto a hidden button)
+if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch { document.documentElement.style.display = 'none'; } }</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Lumio</title>
 <meta name="description" content="Movies and shows, beautifully.">
@@ -18,16 +23,16 @@
 <link rel="preconnect" href="https://api.themoviedb.org">
 <link rel="preconnect" href="https://image.tmdb.org">
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-<link rel="stylesheet" href="app.css?v=wp3500">
+<link rel="stylesheet" href="app.css?v=wp36">
 </head>
 <body>
   <main id="view" aria-live="polite"></main>
   <nav id="nav" class="glass-nav" aria-label="Main"></nav>
   <div id="sheet-root"></div>
   <div id="toast" role="status"></div>
-  <script src="i18n.js?v=wp3500"></script>
-  <script src="scenes.js?v=wp3500"></script>
-  <script src="franchise.js?v=wp3500"></script>
-  <script src="app.js?v=wp3500"></script>
+  <script src="i18n.js?v=wp36"></script>
+  <script src="scenes.js?v=wp36"></script>
+  <script src="franchise.js?v=wp36"></script>
+  <script src="app.js?v=wp36"></script>
 </body>
 </html>

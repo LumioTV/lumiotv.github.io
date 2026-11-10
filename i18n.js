@@ -956,5 +956,14 @@ window.LUMIO_AR = {
 "This list has no channels right now.": "لا توجد قنوات في هذه القائمة حاليًا.",
 "Remove from Favourites": "إزالة من المفضلة",
 "Add to Favourites": "إضافة إلى المفضلة",
-"Remove from Recently watched": "إزالة من المشاهدة مؤخرًا"
+"Remove from Recently watched": "إزالة من المشاهدة مؤخرًا",
+"This reset link has expired": "انتهت صلاحية رابط إعادة التعيين",
+"Choose a new password": "اختر كلمة مرور جديدة",
+"Reset links work once and for one hour. Ask for a new one from the sign-in page.": "تعمل روابط إعادة التعيين مرة واحدة ولمدة ساعة. اطلب رابطًا جديدًا من صفحة تسجيل الدخول.",
+"You will stay signed in here and be signed out on your other devices.": "ستبقى مسجّلًا هنا وسيتم تسجيل خروجك من أجهزتك الأخرى.",
+"New password": "كلمة المرور الجديدة",
+"Repeat the new password": "أعد كتابة كلمة المرور الجديدة",
+"Save new password": "حفظ كلمة المرور الجديدة",
+"The two passwords are different": "كلمتا المرور غير متطابقتين",
+"Password changed. You were signed out on your other devices.": "تم تغيير كلمة المرور. تم تسجيل خروجك من أجهزتك الأخرى."
 };

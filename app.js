@@ -219,7 +219,7 @@ async function fillArt(el) {
   if (el.tagName === 'IMG') { el.src = IMG + (el.dataset.size || 'w780') + p; }
   else { el.style.setProperty('--logo', `url("${IMG}w300${p}")`); el.classList.add('has'); logoLook(p).then(l => el.classList.add('look-' + l)); }
 }
-const franchiseTile = (f, i) => `<a class="tile fr" href="#/catalog/franchise/${f.key}" style="${tileStyle(f.c1, f.c2, i)}"><img class="kb" data-art="${f.key}" alt="" style="animation-delay:-${(i * 1.3) % 16}s" onload="this.classList.add('ok')"><i class="scrim"></i><canvas data-scene="fx_${f.fx}" data-i="${i}"></canvas><span class="lbl"><b>${esc(T(f.name))}</b></span></a>`;
+const franchiseTile = (f, i) => `<a class="tile fr" href="#/catalog/franchise/${f.key}" style="${tileStyle(f.c1, f.c2, i)}"><img class="kb" data-art="${f.key}" alt="" style="animation-delay:-${(i * 1.3) % 16}s" data-ok><i class="scrim"></i><canvas data-scene="fx_${f.fx}" data-i="${i}"></canvas><span class="lbl"><b>${esc(T(f.name))}</b></span></a>`;
 const studioTile = (st, i) => `<a class="tile st" href="#/catalog/studio/${st.key}" style="${tileStyle(st.c1, st.c2, i)}" aria-label="${esc(st.name)}"><canvas data-scene="fx_${st.fx}" data-i="${i}"></canvas><span class="slogo" data-art="${st.key}" style="animation-delay:-${(i * .37) % 4}s"><i></i><b>${esc(st.name)}</b></span></a>`;
 const decadeLabel = (d, big) => `<span class="dlbl ${d.key}${big ? ' big' : ''}"><b>${d.label}</b>${S.lang === 'ar' ? `<small>${esc(T(d.label))}</small>` : ''}</span>`;
 const decadeTile = (d, i) => `<a class="tile dec ph" href="#/catalog/decade/${d.key}" style="${tileStyle(d.c1, d.c2, i)}">${photoBits('decades', d.key, null, i)}<i class="era" style="background:linear-gradient(135deg, ${d.c1}73, transparent, ${d.c2}8c)"></i><canvas class="era-fx" data-scene="dec_${d.key}" data-i="${i}"></canvas>${decadeLabel(d)}</a>`;
@@ -227,7 +227,7 @@ const decadeTile = (d, i) => `<a class="tile dec ph" href="#/catalog/decade/${d.
 const GENRE_FX = { action: 'ember', adventure: 'dust', comedy: 'bubbles', drama: 'candle', scifi: 'hyperspace', horror: 'fog', thriller: 'spotlight', anime: 'petals', animation: 'arc', family: 'stars',
   romance: 'hearts', crime: 'siren', mystery: 'mist', fantasy: 'magic', documentary: 'globe', war: 'searchlights', history: 'grain', western: 'sand', music: 'music', reality: 'flash', kids: 'bubbles' };
 const DISCOVER_FX = { foryou: 'magic', trending: 'ember', popular: 'flash', top_rated: 'rays' };
-const photoBits = (row, key, fx, i) => `<img class="kb" data-row="${row}" data-key="${key}" alt="" loading="lazy" decoding="async" style="animation-delay:-${(i * 1.3) % 16}s" onload="this.classList.add('ok')"><i class="scrim"></i>${fx ? `<canvas data-scene="fx_${fx}" data-i="${i}"></canvas>` : ''}`;
+const photoBits = (row, key, fx, i) => `<img class="kb" data-row="${row}" data-key="${key}" alt="" loading="lazy" decoding="async" style="animation-delay:-${(i * 1.3) % 16}s" data-ok><i class="scrim"></i>${fx ? `<canvas data-scene="fx_${fx}" data-i="${i}"></canvas>` : ''}`;
 const ROWART = {};
 function rowArt(row) {
   const all = raw.get('row_art', {}), c = all[row], ttl = row === 'discover' ? 12 * 3600e3 : 14 * 86400e3;
@@ -799,7 +799,7 @@ function bestTrailer(videos) {
 }
 /** The title's logo art, or its name in type when there's none (or the picture fails). */
 const titleArt = (path, title, cls = '') => path
-  ? `<img class="tlogo ${cls}" src="${IMG}w500${path}" alt="${esc(title)}" onerror="this.outerHTML='<h1 class=&quot;tlogo-txt ${cls}&quot;>'+this.alt.replace(/[<&]/g,'')+'</h1>'">`
+  ? `<img class="tlogo ${cls}" src="${IMG}w500${path}" alt="${esc(title)}" data-err="title" data-cls="${cls}">`
   : `<h1 class="tlogo-txt ${cls}">${esc(title)}</h1>`;
 const metaLine = x => [T(x.media_type === 'tv' || x.first_air_date ? 'Series' : 'Movie'), mainGenre(x) && T(mainGenre(x)), yearOf(x)].filter(Boolean).join('  •  ');
 /**
@@ -987,7 +987,7 @@ async function introSegments(type, id, season, episode, durMs) {
 
 // ============================================================================ views: shared pieces
 /** [first] = the main picture of the screen: fetched straight away at high priority (everything else waits until it's near). */
-function img(src, alt = '', first = false) { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" ${first ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" onload="this.classList.add('ok')">` : ''; }
+function img(src, alt = '', first = false) { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" ${first ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" data-ok>` : ''; }
 const badgesHTML = e => `${e && e.watched ? `<span class="watched" title="${T('Watched')}">${ic('check')}</span>` : ''}${e && e.pin ? `<span class="locked">${ic('lock')}</span>` : ''}`;
 function posterCard(x, i = 0, prog, cont) {
   const t = x.media_type || 'movie', e = libEntry(t, x.id);
@@ -1093,11 +1093,26 @@ async function route() {
       default: location.replace('#/home'); return;
     }
   } catch (e) {
-    if (token === routeToken) view.innerHTML = msg("Couldn't load", e.message || 'Network error', `<button class="btn acc" onclick="route()">${T("Retry")}</button>`);
+    if (token === routeToken) view.innerHTML = msg("Couldn't load", e.message || 'Network error', `<button class="btn acc" data-act="retry">${T("Retry")}</button>`);
   }
   requestAnimationFrame(() => window.scrollTo(0, scrollMemo[hash] || 0));
 }
 window.addEventListener('hashchange', route);
+// What used to be written into the page as onload= / onerror= / onclick= (the content security policy allows no
+// script inside the page's markup, so a title or channel name can never carry script in): handled here instead.
+document.addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG' && t.hasAttribute('data-ok')) t.classList.add('ok'); }, true);
+document.addEventListener('error', e => {
+  const t = e.target, how = t.tagName === 'IMG' && t.getAttribute('data-err');
+  if (how === 'remove') t.remove();
+  else if (how === 'hide') t.style.visibility = 'hidden';
+  else if (how === 'title') { const h = document.createElement('h1'); h.className = 'tlogo-txt ' + (t.dataset.cls || ''); h.textContent = t.alt; t.replaceWith(h); }
+}, true);
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act], [data-href]'); if (!a) return;
+  if (a.dataset.href) { location.hash = a.dataset.href; return; }
+  if (a.dataset.act === 'back') { e.preventDefault(); history.back(); }
+  else if (a.dataset.act === 'retry') route();
+});
 
 // ============================================================================ home
 const heroSrc = (x, wide) => wide ? IMG + 'w1280' + x.backdrop_path : IMG + 'w780' + (x.poster_path || x.backdrop_path);
@@ -1112,7 +1127,7 @@ async function homeView(token) {
   const wide = innerWidth >= 700;
   view.innerHTML = `
     <section class="hero">
-      <div class="hero-track" id="hero-track">${hero.map((x, i) => `<div class="hero-slide">${i === 0 ? img(heroSrc(x, wide), titleOf(x), true) : `<img data-src="${esc(heroSrc(x, wide))}" alt="${esc(titleOf(x))}" decoding="async" onload="this.classList.add('ok')">`}</div>`).join('')}</div>
+      <div class="hero-track" id="hero-track">${hero.map((x, i) => `<div class="hero-slide">${i === 0 ? img(heroSrc(x, wide), titleOf(x), true) : `<img data-src="${esc(heroSrc(x, wide))}" alt="${esc(titleOf(x))}" decoding="async" data-ok>`}</div>`).join('')}</div>
       <div class="hero-info gutter" id="hero-info"></div>
     </section>
     ${rail('Continue Watching', cont, x => progressOf(libEntry(x.media_type, x.id)), true)}
@@ -1209,9 +1224,9 @@ async function personView(id, token) {
   const facts = [p.known_for_department === 'Acting' ? T('Actor') : p.known_for_department, p.birthday ? (p.deathday ? `${p.birthday.slice(0, 4)} – ${p.deathday.slice(0, 4)}` : `${T('Born')} ${p.birthday.slice(0, 4)}`) : '', p.place_of_birth].filter(Boolean);
   const draw = () => {
     const list = filter === 'all' ? all : all.filter(c => c.media_type === filter);
-    view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
+    view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
       <div class="gutter person-head">
-        <div class="person-ph">${p.profile_path ? `<img src="${IMG}h632${p.profile_path}" alt="">` : ''}</div>
+        <div class="person-ph">${p.profile_path ? `<img src="${IMG}h632${esc(p.profile_path)}" alt="">` : ''}</div>
         <div><h1>${esc(p.name)}</h1>${facts.length ? `<p class="dim">${esc(facts.join('  ·  '))}</p>` : ''}
           <p class="acc-t">${movies} ${T('Movies')}  ·  ${shows} ${T('Shows')}</p>
           ${p.biography ? `<p class="dim bio">${esc(p.biography)}</p>` : ''}</div>
@@ -1293,7 +1308,7 @@ function toggleFav(ch, card) {
 const savedToCh = x => ({ name: x.name, url: x.url, logo: x.logo, groups: x.group ? [x.group] : [] });
 function chCard(ch, i, favs) {
   const note = chNote(ch.name), sub = [ch.groups[0], note].filter(Boolean).map(x => T(x)).join(' · ');
-  return `<button class="ch" data-i="${i}"><span class="ch-logo">${ch.logo ? `<img src="${esc(ch.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<b class="ch-ph">${esc(cleanName(ch.name).replace(/[^\p{L}\p{N}]/gu, '').slice(0, 3).toUpperCase())}</b><span class="ch-live">${T('LIVE')}</span>${favs.has(ch.url) ? `<span class="ch-fav">${ic('star')}</span>` : ''}</span>
+  return `<button class="ch" data-i="${i}"><span class="ch-logo">${ch.logo ? `<img src="${esc(ch.logo)}" alt="" loading="lazy" data-err="remove">` : ''}<b class="ch-ph">${esc(cleanName(ch.name).replace(/[^\p{L}\p{N}]/gu, '').slice(0, 3).toUpperCase())}</b><span class="ch-live">${T('LIVE')}</span>${favs.has(ch.url) ? `<span class="ch-fav">${ic('star')}</span>` : ''}</span>
     <span class="ch-name">${esc(cleanName(ch.name))}</span>${sub ? `<span class="dim ch-sub">${esc(sub)}</span>` : ''}</button>`;
 }
 function bindChannels(box, list, from = 0) {
@@ -1345,7 +1360,7 @@ function dayLabel(t) {
 const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 /** Square card like the X app: league on top, crests and score (or kick-off) in the middle, status below. */
 function matchCard(m) {
-  const crest = sd => `<span class="mc-team"><img src="${esc(sd.logo || '')}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b class="${sd.winner ? 'win' : ''}">${esc(sd.short || sd.name)}</b></span>`;
+  const crest = sd => `<span class="mc-team"><img src="${esc(sd.logo || '')}" alt="" loading="lazy" data-err="hide"><b class="${sd.winner ? 'win' : ''}">${esc(sd.short || sd.name)}</b></span>`;
   const mid = m.upcoming || m.home.score == null ? `<span class="mc-time">${hhmm(m.start)}</span>` : `<span class="mc-score">${esc(m.home.score)}-${esc(m.away.score)}</span>`;
   const foot = m.live ? `<span class="mc-live"><i></i>${T('LIVE')} ${esc(m.clock || m.detail)}</span>` : m.finished ? `<span class="mc-ft">${esc(m.detail || 'FT')}</span>` : `<span class="mc-ft">${esc(dayLabel(m.start))}</span>`;
   return `<button class="match ${m.live ? 'is-live' : ''}" data-mid="${esc(m.id)}"><span class="mc-lg">${esc(S.lang === 'ar' ? m.league.ar : m.league.name)}</span>
@@ -1436,13 +1451,13 @@ async function channelsView(kind, key, token) {
   const src = kind === 'src' ? (S.iptv || []).find(p => p.id === key) : null;
   if (!cat && !src) { location.replace('#/livetv'); return; }
   const c1 = cat?.c1 || '#2563EB', c2 = cat?.c2 || '#0B1E45', title = cat ? T(cat.name) : src.name, emoji = cat?.emoji || (src.kind === 'xtream' ? '🔐' : '📃');
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="banner" style="--c1:${c1};--c2:${c2}"><canvas id="bn-scene"></canvas><div class="ttl"><span style="font-size:42px">${emoji}</span><div><h1>${esc(title)}</h1><p id="ch-count">${T('Loading channels…')}</p></div></div></div>
     <div id="ch-tools"></div><div class="gutter"><div class="grid ch-grid" id="ch-grid">${'<div class="sk" style="aspect-ratio:16/10;border-radius:16px"></div>'.repeat(8)}</div></div>`;
   GenreScenes.attach($('#bn-scene'), cat ? 'tv_' + cat.key : 'tv_playlist', 0);
   let all;
   try { all = cat ? await freeChannels(cat) : await sourceChannels(src); }
-  catch (e) { if (token === routeToken) $('#ch-grid').outerHTML = msg("Couldn't load", src && src.kind === 'xtream' ? 'This server may not allow websites to read it. Xtream logins work best in the Lumio app.' : (e.message || 'Network error'), `<button class="btn acc" onclick="route()">${T('Retry')}</button>`); return; }
+  catch (e) { if (token === routeToken) $('#ch-grid').outerHTML = msg("Couldn't load", src && src.kind === 'xtream' ? 'This server may not allow websites to read it. Xtream logins work best in the Lumio app.' : (e.message || 'Network error'), `<button class="btn acc" data-act="retry">${T('Retry')}</button>`); return; }
   if (token !== routeToken) return;
   $('#ch-count').textContent = `${all.length} ${T('channels')}`;
   const counts = {}; all.forEach(ch => ch.groups.forEach(g => { counts[g] = (counts[g] || 0) + 1; }));
@@ -1532,8 +1547,8 @@ async function catalogView(kind, key, token) {
   const st = { type: info.mq == null ? 'tv' : 'movie', sort: sorts[0][0], page: 0, items: [], loading: false, end: false };
   const titleHTML = info.decade ? decadeLabel(info.decade, true) : `<h1>${esc(info.service || info.studio ? info.title : T(info.title))}</h1>`;
   const subText = info.studio ? `${T('Films from')} ${info.title}` : info.decade ? (S.lang === 'ar' ? `${T('The best films of the')} ${T(info.title)}` : `The best films of the ${info.title}`) : null;
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
-    <div class="banner" style="--c1:${info.c1};--c2:${info.c2}">${info.row ? `<img class="kb" data-row="${info.row}" data-key="${key}" data-size="w1280" alt="" onload="this.classList.add('ok')"><i class="scrim"></i>` : ''}${info.franchise ? `<img class="kb" id="bn-art" data-art="${info.franchise.key}" data-size="w1280" alt="" onload="this.classList.add('ok')"><i class="scrim"></i>` : ''}${info.genre || info.scene ? `<canvas id="bn-scene" class="${info.decade ? 'era-fx' : ''}"></canvas>` : ''}${info.studio ? `<span class="slogo bn" data-art="${info.studio.key}"><i></i></span>` : ''}
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
+    <div class="banner" style="--c1:${info.c1};--c2:${info.c2}">${info.row ? `<img class="kb" data-row="${info.row}" data-key="${key}" data-size="w1280" alt="" data-ok><i class="scrim"></i>` : ''}${info.franchise ? `<img class="kb" id="bn-art" data-art="${info.franchise.key}" data-size="w1280" alt="" data-ok><i class="scrim"></i>` : ''}${info.genre || info.scene ? `<canvas id="bn-scene" class="${info.decade ? 'era-fx' : ''}"></canvas>` : ''}${info.studio ? `<span class="slogo bn" data-art="${info.studio.key}"><i></i></span>` : ''}
       <div class="ttl">${info.service ? logoHTML(info.service, 0, 58) : (!info.genre && info.emoji ? `<span style="font-size:44px" class="emoji-b">${info.emoji}</span>` : '')}
         <div>${titleHTML}<p>${esc(subText || (info.service ? `${T('Streaming now on')} ${info.title}` : info.genre ? (S.lang === 'ar' ? `أفضل عناوين ${T(info.title)}` : info.sub) : T(info.sub)))}</p></div></div></div>
     <div class="gutter">
@@ -1602,7 +1617,7 @@ async function detailsView(type, id, token) {
   const runtime = d.runtime || (d.episode_run_time || [])[0];
   const playLabel = resume ? (type === 'tv' ? `${T('Resume')} S${resume.season}E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season}E1` : T('Play');
   const playHref = type === 'tv' ? `#/streams/tv/${id}/${resume?.season || season}/${resume?.episode || 1}` : `#/streams/movie/${id}/-/-`;
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="backdrop" id="d-top">${img(d.backdrop_path && IMG + (wide ? 'original' : 'w1280') + d.backdrop_path)}<div class="trailer-box" id="d-trailer"></div>
       <button class="icon-btn mute-btn" id="d-mute" hidden aria-label="${T('Sound')}">${ic('volOff')}</button>
       <div class="d-info gutter"><div class="pst">${img(d.poster_path && IMG + 'w342' + d.poster_path)}</div>
@@ -1615,7 +1630,7 @@ async function detailsView(type, id, token) {
         </div></div></div>
     <p class="overview gutter">${esc(d.overview)}</p>
     ${type === 'tv' ? `<div class="chips gutter" id="seasons">${seasons.map(s => `<button class="chip ${s.season_number === season ? 'on' : ''}" data-n="${s.season_number}">${esc(s.name)}</button>`).join('')}</div><div class="eps gutter" id="eps"></div>` : ''}
-    ${(d.credits?.cast || []).length ? `<div class="rail-title gutter">${T("Cast")}</div><div class="rail gutter">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" onclick="location.hash='#/person/${c.id}'">${c.profile_path ? `<img src="${IMG}w185${c.profile_path}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}`;
+    ${(d.credits?.cast || []).length ? `<div class="rail-title gutter">${T("Cast")}</div><div class="rail gutter">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" data-href="#/person/${c.id}">${c.profile_path ? `<img src="${IMG}w185${esc(c.profile_path)}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}`;
   ageRating(type, id).then(a => { const el = $('#d-age'); if (el && a?.label) el.outerHTML = `<span class="badge age">${esc(a.label)}</span>`; });
   // The trailer starts by itself over the artwork (muted unless Settings → Appearance says sound; tap 🔇 for sound)
   const trKey = bestTrailer(d.videos);
@@ -1666,7 +1681,7 @@ async function streamsView(type, id, season, episode, token) {
   const imdb = d.imdb_id || d.external_ids?.imdb_id;
   const meta = [(d.genres || []).slice(0, 2).map(g => T(g.name)).join(' • '), yearOf(d)].filter(Boolean).join('  •  ');
   // Premium two-pane (wide screens): the title's artwork and logo on the left, compact sources on the right
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="src-page"><div class="src-bg">${img(d.backdrop_path && IMG + (innerWidth >= 900 ? 'original' : 'w1280') + d.backdrop_path)}</div>
       <div class="src-head gutter">${titleArt(pickLogo(d.images?.logos), titleOf(d), 's-logo')}
         ${meta ? `<div class="src-meta">${esc(meta)}</div>` : ''}${season != null ? `<div class="dim">${T('Season')} ${season} • ${T('Episode')} ${episode}</div>` : ''}
@@ -1709,10 +1724,12 @@ async function streamsView(type, id, season, episode, token) {
 // ============================================================================ scripts loaded only when needed
 /** hls.js (live channels in Chrome / Android) and the QR library (watch party invite) download on first use, not on every visit. */
 const LIBS = { hls: 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js', qr: 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js' };
+// Fingerprints of the exact files: the browser refuses to run them if the download was changed on the way or at the CDN.
+const LIB_SRI = { hls: 'sha384-9v3HcdYrO3D+OPDTjZ40RXocgE4GtXVCd3/mCS62JsM93JXgI1afJVuwjFvsu6ni', qr: 'sha384-lQXOAyZwHXE55JFyrOMB7nY2Wv+m5ZWNtJcHrd1rceRQXAYNLak8ukN5TjBTcIwz' };
 const libLoads = {};
 function needLib(k) {
   return libLoads[k] || (libLoads[k] = new Promise(res => {
-    const sc = document.createElement('script'); sc.src = LIBS[k]; sc.async = true; sc.crossOrigin = 'anonymous';
+    const sc = document.createElement('script'); sc.src = LIBS[k]; sc.integrity = LIB_SRI[k]; sc.async = true; sc.crossOrigin = 'anonymous';
     sc.onload = () => res(true); sc.onerror = () => { delete libLoads[k]; res(false); };
     document.head.appendChild(sc);
   }));
@@ -2133,7 +2150,7 @@ function openPlayer() {
     const card = document.createElement('div');
     if (n.released) {
       card.className = 'upnext glass';
-      card.innerHTML = `<div class="un-pic">${n.still ? `<img src="${IMG}w300${n.still}" alt="">` : ''}<span>S${n.season} • E${n.episode}</span></div>
+      card.innerHTML = `<div class="un-pic">${n.still ? `<img src="${IMG}w300${esc(n.still)}" alt="">` : ''}<span>S${n.season} • E${n.episode}</span></div>
         <div class="un-txt"><small class="un-l">${T('Next episode')}</small><b>${esc(n.name)}</b><small class="dim">${[n.runtime ? n.runtime + 'm' : '', shortDate(n.air)].filter(Boolean).join('  ·  ')}</small>
         <div class="un-btns"><button class="un-play"><i></i>${ic('play')}<span>${T('Play now')}</span></button><button class="un-x" aria-label="${T('Close')}">${ic('close')}</button></div></div>`;
       $('.un-play', card).onclick = e => { e.stopPropagation(); card.remove(); playNext(n); };
@@ -2412,7 +2429,7 @@ async function unlockThen(type, id, title, fn) {
 async function lockGate(type, id, token) {
   const e = libEntry(type, id);
   if (!e?.pin || unlocked.has(lockKey(type, id))) return false;
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="${T('Back')}">${ic('back')}</a>
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="${T('Back')}">${ic('back')}</a>
     <div class="msg" style="min-height:70dvh;align-content:center"><div class="pin-ic big">${ic('lock')}</div><h3>${T('This title is locked')}</h3><p>${T('Enter the 4-digit PIN to open it')}</p>
     <button class="btn acc" id="gpin">${T('Enter PIN')}</button></div>`;
   const ask = async () => { if (await verifyPin(type, id, e.title)) { unlocked.add(lockKey(type, id)); if (token === routeToken) route(); } };
@@ -2428,7 +2445,7 @@ function openPosterMenu(p) {
   if (document.querySelector('.pop-bg')) return;
   const type = p.dataset.type, id = +p.dataset.id, title = p.dataset.title, poster = p.dataset.poster, cont = p.dataset.cont === '1';
   const e = libEntry(type, id);
-  const header = `<div class="pop-head">${poster ? `<img src="${IMG}w154${poster}" alt="">` : '<span class="ph"></span>'}<div><b>${esc(title)}</b><small class="dim">${esc(p.dataset.year || '')}</small></div></div>`;
+  const header = `<div class="pop-head">${poster ? `<img src="${IMG}w154${esc(poster)}" alt="">` : '<span class="ph"></span>'}<div><b>${esc(title)}</b><small class="dim">${esc(p.dataset.year || '')}</small></div></div>`;
   const base = cur => cur || { type, id, title, poster, pos: 0, dur: 0 };
   let opts;
   if (cont && e) {
@@ -2523,7 +2540,7 @@ async function loginView() {
     $('#lshow', w).onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; };
     $('#lforgot', w)?.addEventListener('click', async () => {
       if (!validEmail(email.value)) return shake('Enter your email above, then tap “Forgot password?”');
-      try { await authCall('recover', { email: normEmail(email.value) }); err.style.color = '#B5D46B'; err.textContent = T('Password reset email sent'); } catch (e) { shake(e.message); }
+      try { await authCall('recover?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value) }); err.style.color = '#B5D46B'; err.textContent = T('Password reset email sent'); } catch (e) { shake(e.message); }
     });
     $('#lf', w).onsubmit = async e => {
       e.preventDefault();
@@ -2544,7 +2561,7 @@ async function loginView() {
   document.body.appendChild(w); draw();
   try {
     const list = (await api.trending('all', 'week')).filter(x => x.poster_path).slice(0, 18);
-    const col = k => `<div class="wcol" style="animation-duration:${38 + k * 7}s;animation-direction:${k % 2 ? 'reverse' : 'normal'}">${[...list, ...list].filter((_, i) => i % 4 === k).map(x => `<img src="${IMG}w342${x.poster_path}" alt="" loading="lazy">`).join('')}</div>`;
+    const col = k => `<div class="wcol" style="animation-duration:${38 + k * 7}s;animation-direction:${k % 2 ? 'reverse' : 'normal'}">${[...list, ...list].filter((_, i) => i % 4 === k).map(x => `<img src="${IMG}w342${esc(x.poster_path)}" alt="" loading="lazy">`).join('')}</div>`;
     const wall = $('#wall', w); if (wall) wall.innerHTML = [0, 1, 2, 3].map(col).join('');
   } catch { /* offline */ }
 }
@@ -2552,6 +2569,54 @@ const normEmail = e => String(e || '').trim().toLowerCase();
 const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normEmail(e));
 
 /** Load the account: cloud first; if the cloud is empty, upload what this browser had before. */
+/**
+ * The link in a "reset your password" email (sent from the apps or this site) lands here with a one-time sign-in in
+ * the address: #access_token=…&type=recovery. It's taken out of the address bar at once, then you choose a new
+ * password; changing it signs you out everywhere else (the old password may be known to someone).
+ */
+function recoveryLink() {
+  const h = new URLSearchParams((location.hash || '').replace(/^#\/?/, ''));
+  if (h.get('type') === 'recovery' && h.get('access_token')) return { access: h.get('access_token'), refresh: h.get('refresh_token'), expiresIn: +h.get('expires_in') || 3600 };
+  if (h.get('error_code') || h.get('error_description')) return { error: true };
+  return null;
+}
+function newPasswordView(link) {
+  history.replaceState(null, '', location.pathname + location.search + '#/home');
+  renderNav(null); view.innerHTML = ''; document.querySelectorAll('.welcome').forEach(x => x.remove());
+  const w = document.createElement('div'); w.className = 'welcome';
+  w.innerHTML = `<div class="wall"></div><div class="wshade"></div><div class="wbox">${lumioLogo()}
+    <h1>${T(link.error ? 'This reset link has expired' : 'Choose a new password')}</h1>
+    <p class="dim">${T(link.error ? 'Reset links work once and for one hour. Ask for a new one from the sign-in page.' : 'You will stay signed in here and be signed out on your other devices.')}</p>
+    ${link.error ? `<button class="btn wgo olive" id="npback">${T('Sign in')}</button>` : `<form id="npf" novalidate>
+      <input class="field" id="np1" type="password" autocomplete="new-password" placeholder="${T('New password')}" aria-label="${T('New password')}">
+      <input class="field" id="np2" type="password" autocomplete="new-password" placeholder="${T('Repeat the new password')}" aria-label="${T('Repeat the new password')}">
+      <div class="werr" id="nperr"></div>
+      <button class="btn wgo olive" type="submit" id="npgo">${T('Save new password')}</button>
+    </form>`}</div>`;
+  document.body.appendChild(w);
+  const back = () => { w.remove(); loginView(); };
+  if (link.error) { $('#npback', w).onclick = back; return; }
+  const err = $('#nperr', w);
+  $('#npf', w).onsubmit = async e => {
+    e.preventDefault();
+    const a = $('#np1', w).value, b = $('#np2', w).value;
+    err.style.color = '#FF6B6B';
+    if (a.length < 6) { err.textContent = T('Password must be at least 6 characters'); return; }
+    if (a !== b) { err.textContent = T('The two passwords are different'); return; }
+    const go = $('#npgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
+    try {
+      const h = { apikey: SB_KEY, Authorization: 'Bearer ' + link.access, 'Content-Type': 'application/json' };
+      const r = await fetch(`${SB_URL}/auth/v1/user`, { method: 'PUT', headers: h, body: JSON.stringify({ password: a }) });
+      const user = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'This reset link has expired' : friendlyAuth(user.msg || user.error_description || user.message || 'HTTP ' + r.status));
+      await fetch(`${SB_URL}/auth/v1/logout?scope=others`, { method: 'POST', headers: h }).catch(() => {});   // everywhere else
+      saveSession({ access_token: link.access, refresh_token: link.refresh, expires_in: link.expiresIn, user });
+      await afterSignIn();
+      w.remove();
+      toast(T('Password changed. You were signed out on your other devices.'));
+    } catch (ex) { go.disabled = false; go.textContent = T('Save new password'); err.textContent = T(ex instanceof TypeError ? 'Network error' : ex.message || 'Network error'); }
+  };
+}
 async function afterSignIn() {
   CD = raw.get(cacheKey(), {}) || {};
   loadSyncState();
@@ -2941,7 +3006,7 @@ function bindSettings(page) {
 function appearanceView() {
   const sw = (id, on) => `<button class="switch ${on ? 'on' : ''}" id="${id}" role="switch" aria-checked="${!!on}"></button>`;
   const cinemaOn = S.accent === 'cinema' && S.titleColor === 'cinema' && S.arabicFont === 'cinema' && S.iconColor === 'cinema';
-  view.innerHTML = `<a class="icon-btn back" href="javascript:history.back()" aria-label="Back">${ic('back')}</a>
+  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
   <h1 class="page-title gutter" style="padding-inline-start:64px">${T("Appearance")}</h1><div class="gutter">
     <div class="card ap-preview"><img src="${iconURL(S.iconColor || 'classic', 112)}" alt=""><div><h2>${S.lang === 'ar' ? 'السينما الليلة' : T('Tonight at the movies')}</h2><div class="bar"></div>
       <span class="pill">${T('Play')}</span><span class="pill alt">${T('Details')}</span></div></div>
@@ -3305,7 +3370,9 @@ applyTheme(); applyLang();
 playIntro();
 if (location.hash === '#/play') history.replaceState(null, '', '#/home');
 let PENDING_PARTY = (location.hash.match(/^#\/party\/([A-Za-z0-9]{4,8})/) || [])[1] || null;
-if (location.hash.startsWith('#/tv')) tvLinkView();   // opened from the QR code on Lumio TV
+const RECOVERY = recoveryLink();
+if (RECOVERY) newPasswordView(RECOVERY);              // opened from a "reset your password" email
+else if (location.hash.startsWith('#/tv')) tvLinkView();   // opened from the QR code on Lumio TV
 else if (!SESSION) loginView();
 else {
   profilesView();   // "Who's watching?" on every launch
