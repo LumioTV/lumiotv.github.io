@@ -440,7 +440,7 @@ function friendlyAuth(m) {
   if (/Invalid login credentials/i.test(m)) return 'Wrong email or password';
   if (/already (been )?registered/i.test(m)) return 'An account with this email already exists. Sign in instead.';
   if (/Email not confirmed/i.test(m)) return 'Please confirm your email first (check your inbox).';
-  if (/Password should be/i.test(m)) return 'Password must be at least 6 characters';
+  if (/Password should be/i.test(m)) return 'Password must be at least 8 characters';
   if (/rate limit/i.test(m)) return 'Too many attempts. Try again in a minute.';
   return m;
 }
@@ -2545,10 +2545,10 @@ async function loginView() {
     $('#lf', w).onsubmit = async e => {
       e.preventDefault();
       if (!validEmail(email.value)) return shake('Enter a valid email address');
-      if (pw.value.length < 6) return shake('Password must be at least 6 characters');
+      if (pw.value.length < 8) return shake('Password must be at least 8 characters');
       const go = $('#lgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
       try {
-        const j = creating ? await authCall('signup', { email: normEmail(email.value), password: pw.value })
+        const j = creating ? await authCall('signup?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value), password: pw.value })
                            : await authCall('token?grant_type=password', { email: normEmail(email.value), password: pw.value });
         if (!j.access_token) { err.style.color = '#B5D46B'; err.textContent = T('Account created. Check your email to confirm it, then sign in.'); go.disabled = false; go.textContent = T('Sign in'); creating = false; return; }
         saveSession(j);
@@ -2580,6 +2580,24 @@ function recoveryLink() {
   if (h.get('error_code') || h.get('error_description')) return { error: true };
   return null;
 }
+/** The link in a "confirm your email" email lands here with a sign-in in the address (#access_token=…&type=signup). */
+function confirmLink() {
+  const h = new URLSearchParams((location.hash || '').replace(/^#\/?/, ''));
+  const type = h.get('type');
+  if ((type === 'signup' || type === 'email' || type === 'email_change') && h.get('access_token') && h.get('refresh_token'))
+    return { access_token: h.get('access_token'), refresh_token: h.get('refresh_token'), expires_in: +h.get('expires_in') || 3600 };
+  return null;
+}
+async function signInFromConfirm(t) {
+  history.replaceState(null, '', location.pathname + location.search + '#/home');   // the sign-in leaves the address bar at once
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t.access_token } });
+    if (!r.ok) throw new Error('expired');
+    saveSession(Object.assign({}, t, { user: await r.json() }));
+    await afterSignIn();
+    toast(T("Email confirmed. You're signed in."));
+  } catch { loginView(); toast(T('This link has expired. Sign in with your email and password.')); }
+}
 function newPasswordView(link) {
   history.replaceState(null, '', location.pathname + location.search + '#/home');
   renderNav(null); view.innerHTML = ''; document.querySelectorAll('.welcome').forEach(x => x.remove());
@@ -2601,7 +2619,7 @@ function newPasswordView(link) {
     e.preventDefault();
     const a = $('#np1', w).value, b = $('#np2', w).value;
     err.style.color = '#FF6B6B';
-    if (a.length < 6) { err.textContent = T('Password must be at least 6 characters'); return; }
+    if (a.length < 8) { err.textContent = T('Password must be at least 8 characters'); return; }
     if (a !== b) { err.textContent = T('The two passwords are different'); return; }
     const go = $('#npgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
     try {
@@ -2722,11 +2740,11 @@ function tvLinkView() {
       code = clean(tc.value);
       if (code.length !== 8) return shake('Enter the 8-character code from your TV');
       if (!validEmail(email.value)) return shake('Enter a valid email address');
-      if (pw.value.length < 6) return shake('Password must be at least 6 characters');
+      if (pw.value.length < 8) return shake('Password must be at least 8 characters');
       const go = $('#tgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
       try {
         // A fresh sign-in just for the TV (this page's own session is left alone)
-        const j = creating ? await authCall('signup', { email: normEmail(email.value), password: pw.value })
+        const j = creating ? await authCall('signup?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value), password: pw.value })
                            : await authCall('token?grant_type=password', { email: normEmail(email.value), password: pw.value });
         if (!j.access_token) { err.style.color = '#B5D46B'; err.textContent = T('Account created. Check your email to confirm it, then sign in.'); creating = false; go.disabled = false; go.textContent = T('Sign in TV'); return; }
         const r = await fetch(`${SB_URL}/rest/v1/rpc/link_tv`, { method: 'POST',
@@ -3370,8 +3388,9 @@ applyTheme(); applyLang();
 playIntro();
 if (location.hash === '#/play') history.replaceState(null, '', '#/home');
 let PENDING_PARTY = (location.hash.match(/^#\/party\/([A-Za-z0-9]{4,8})/) || [])[1] || null;
-const RECOVERY = recoveryLink();
+const RECOVERY = recoveryLink(), CONFIRMED = confirmLink();
 if (RECOVERY) newPasswordView(RECOVERY);              // opened from a "reset your password" email
+else if (CONFIRMED) signInFromConfirm(CONFIRMED);     // opened from the "confirm your email" email
 else if (location.hash.startsWith('#/tv')) tvLinkView();   // opened from the QR code on Lumio TV
 else if (!SESSION) loginView();
 else {

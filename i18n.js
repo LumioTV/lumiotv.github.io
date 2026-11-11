@@ -965,5 +965,8 @@ window.LUMIO_AR = {
 "Repeat the new password": "أعد كتابة كلمة المرور الجديدة",
 "Save new password": "حفظ كلمة المرور الجديدة",
 "The two passwords are different": "كلمتا المرور غير متطابقتين",
-"Password changed. You were signed out on your other devices.": "تم تغيير كلمة المرور. تم تسجيل خروجك من أجهزتك الأخرى."
+"Password changed. You were signed out on your other devices.": "تم تغيير كلمة المرور. تم تسجيل خروجك من أجهزتك الأخرى.",
+"Password must be at least 8 characters": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+"Email confirmed. You're signed in.": "تم تأكيد بريدك الإلكتروني. أنت مسجّل الدخول الآن.",
+"This link has expired. Sign in with your email and password.": "انتهت صلاحية هذا الرابط. سجّل الدخول ببريدك الإلكتروني وكلمة المرور."
 };
