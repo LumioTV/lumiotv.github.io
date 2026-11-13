@@ -10,6 +10,17 @@ const BUILT_IN_ADDONS = [
   { url: 'https://opensubtitles-v3.strem.io/manifest.json', name: 'OpenSubtitles', resources: ['subtitles'], builtIn: true },
   { url: 'https://subdl.strem.top/c3ViZGxfM1ZZYVFfcUVoa2d1a0hOZlBlSXBDTFVHNWczS0NfRTF1bFBJMzI2M2lOQS9BUi9oaUV4Y2x1ZGUv/manifest.json', name: 'SubDL Subtitles', resources: ['subtitles'], builtIn: true },
 ];
+// Background themes (Settings → Appearance), the same as the apps: [key, name, about, page, card, raised card, glows]
+// where a glow is [colour or 'accent', x, y, size, strength], a soft pool of light fixed behind the page.
+const BG_THEMES = [
+  ['dark', 'Dark', "Lumio's classic", '#0B0B0F', '#15151C', '#1E1E28', []],
+  ['glass', 'Liquid Glass', 'Frosted cards over drifting light', '#090C13', 'rgba(27,34,50,.72)', 'rgba(38,46,66,.8)', [['accent', .12, -.05, .95, .34], ['#38D6FF', .98, .12, .75, .2], ['#B45CFF', .55, 1.05, .95, .16]]],
+  ['midnight', 'Midnight', 'Deep navy, moonlit', '#060A15', '#0E1527', '#172039', [['#2B4C9B', .5, -.15, 1.15, .34]]],
+  ['aurora', 'Aurora', 'Northern lights over black', '#050A0B', '#0D1617', '#152122', [['#19D3A2', .18, -.05, .9, .2], ['#7B5CFF', .88, .02, .8, .18]]],
+  ['ember', 'Ember', 'Warm, like a cinema before the film', '#0D0806', '#19110D', '#241914', [['#FF7A1A', .5, -.1, 1, .16], ['#E3262F', 0, .25, .7, .1]]],
+  ['velvet', 'Velvet', 'Plum and wine', '#0D0710', '#19101F', '#24182D', [['#B0306A', .85, -.05, .9, .2], ['#6A2BB8', .1, .1, .8, .18]]],
+  ['graphite', 'Graphite', 'Neutral grey, no colour cast', '#121214', '#1C1C1F', '#2A2A2E', []],
+];
 const ACCENTS = [
   ['midnight', 'Midnight', '#5A6080'], ['violet', 'Violet', '#7C5CFF'], ['cinema', 'Cinema', '#E3262F'], ['ocean', 'Ocean', '#2D8CFF'], ['emerald', 'Emerald', '#10B981'], ['ruby', 'Ruby', '#FF3B5C'],
   ['sunset', 'Sunset', '#FF7A1A'], ['gold', 'Gold', '#F5B700'], ['sakura', 'Sakura', '#FF5FA8'],
@@ -280,6 +291,7 @@ const P = {
   fwd: 'M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z',
   close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
   check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+  eyeoff: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z',
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
   folder: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
   eyeOff: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z',
@@ -368,6 +380,7 @@ function fromApp(a) {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
     accent: ver < 4 && a.accentPreset === 'custom' && isOliveHex(longToHex(a.customAccent ?? 0xFF7C5CFF)) ? 'midnight' : (a.accentPreset || 'midnight'), customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
     titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: iconColor || 'midnight',
+    bgTheme: a.bgTheme || 'dark', antiSpoiler: !!a.antiSpoiler,
     intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),
     skipNudity: !!a.skipNudity, subLang, trailers: a.trailerPreviews || 'sound', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
@@ -380,6 +393,7 @@ function toApp(w, base) {
   return Object.assign({}, base, {
     tmdbKey: w.tmdbKey, region: w.region, accentPreset: w.accent, customAccent: hexToLong(w.customAccent), amoled: !!w.amoled,
     titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'midnight',
+    bgTheme: w.bgTheme || 'dark', antiSpoiler: !!w.antiSpoiler,
     introAnimation: w.intro !== false, introSound: w.introSound !== false,
     skipIntro: w.skipIntro.toUpperCase(), skipRecap: w.skipRecap.toUpperCase(), skipCredits: w.skipCredits.toUpperCase(), skipNudity: !!w.skipNudity,
     subtitleLanguage: w.subLang, trailerPreviews: w.trailers || 'sound', subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
@@ -669,7 +683,17 @@ function applyTheme() {
     }
   } else { const l = document.querySelector('link[rel="apple-touch-icon"]'); if (l) l.href = 'icons/apple-touch-icon.png'; document.querySelector('link[rel="icon"]')?.remove(); }
   document.documentElement.classList.toggle('amoled', !!S.amoled);
-  const bg = S.amoled ? '#000000' : '#0B0B0F';
+  // background theme (same list as the apps): page and card colours, and pools of light fixed behind the page
+  const th = S.amoled ? null : (BG_THEMES.find(t => t[0] === S.bgTheme) || BG_THEMES[0]);
+  const rs = document.documentElement.style;
+  if (th) { rs.setProperty('--bg', th[3]); rs.setProperty('--s1', th[4]); rs.setProperty('--s2', th[5]); }
+  else ['--bg', '--s1', '--s2'].forEach(v => rs.removeProperty(v));
+  rs.setProperty('--glows', th && th[6].length ? th[6].map(([c, x, y, r, a]) => {
+    const col = c === 'accent' ? `color-mix(in srgb, var(--accent) ${Math.round(a * 100)}%, transparent)` : `${c}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
+    return `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${col}, transparent ${Math.round(r * 70)}%)`;
+  }).join(', ') : 'none');
+  document.documentElement.classList.toggle('bg-glass', !!th && th[0] === 'glass');
+  const bg = S.amoled ? '#000000' : th[3];
   document.querySelector('meta[name=theme-color]').setAttribute('content', bg);
   let cue = document.getElementById('cue-style');
   if (!cue) { cue = document.createElement('style'); cue.id = 'cue-style'; document.head.appendChild(cue); }
@@ -1664,7 +1688,8 @@ async function detailsView(type, id, token) {
       box.innerHTML = eps.map((ep, i) => {
         const cur = le && le.season === ep.season_number && le.episode === ep.episode_number, p = cur ? progressOf(le) : 0;
         const seen = (le?.eps || []).includes(`${ep.season_number}:${ep.episode_number}`);
-        return `<a class="ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && p < .92 ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${cur && !seen ? `<small class="ep-here">${T('Continue')}</small>` : ''}${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p>${esc(ep.overview || '')}</p></div></a>`;
+        const hide = S.antiSpoiler && !seen && !(cur && p > 0);   // Anti Spoiler: not watched yet → no picture, no story
+        return `<a class="ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${hide ? `<span class="spoiler">${ic('eyeoff')}</span>` : img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && p < .92 ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${cur && !seen ? `<small class="ep-here">${T('Continue')}</small>` : ''}${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p${hide ? ' class="dim"' : ''}>${hide ? `<i>${T("Hidden until you've watched it")}</i>` : esc(ep.overview || '')}</p></div></a>`;
       }).join('');
       box.querySelectorAll('.ep').forEach(a => { const [, , , , sn, en] = a.getAttribute('href').split('/'); tapOrHold(a, () => quickPlay('tv', id, +sn, +en), () => { location.hash = a.getAttribute('href'); }); });
     };
@@ -2150,7 +2175,7 @@ function openPlayer() {
     const card = document.createElement('div');
     if (n.released) {
       card.className = 'upnext glass';
-      card.innerHTML = `<div class="un-pic">${n.still ? `<img src="${IMG}w300${esc(n.still)}" alt="">` : ''}<span>S${n.season} • E${n.episode}</span></div>
+      card.innerHTML = `<div class="un-pic">${S.antiSpoiler ? `<span class="spoiler">${ic('eyeoff')}</span>` : n.still ? `<img src="${IMG}w300${esc(n.still)}" alt="">` : ''}<span>S${n.season} • E${n.episode}</span></div>
         <div class="un-txt"><small class="un-l">${T('Next episode')}</small><b>${esc(n.name)}</b><small class="dim">${[n.runtime ? n.runtime + 'm' : '', shortDate(n.air)].filter(Boolean).join('  ·  ')}</small>
         <div class="un-btns"><button class="un-play"><i></i>${ic('play')}<span>${T('Play now')}</span></button><button class="un-x" aria-label="${T('Close')}">${ic('close')}</button></div></div>`;
       $('.un-play', card).onclick = e => { e.stopPropagation(); card.remove(); playNext(n); };
@@ -3033,11 +3058,16 @@ function appearanceView() {
       <div class="colors" style="padding-top:14px">${ACCENTS.map(([k, n, c]) => `<button class="dot ${S.accent === k ? 'on' : ''}" data-acc="${k}"><i style="background:${c}">${ic('check')}</i>${T(n)}</button>`).join('')}
         <button class="dot custom ${S.accent === 'custom' ? 'on' : ''}" data-acc="custom"><i><span style="background:${esc(S.customAccent)}">${ic('check')}</span></i>${T("Custom")}</button></div>
       ${S.accent === 'custom' ? `<div style="padding-top:14px"><input type="color" id="custc" value="${esc(S.customAccent)}" aria-label="Custom colour"></div>` : ''}</div></div>
+    <div class="card"><div class="set-row" style="display:block"><b>${T("Background")}</b><small class="dim">${T("The colour behind every page, and the cards on it")}</small>
+      <div class="ap-bgs">${BG_THEMES.map(([k, n, about, bg, s1, s2, glows]) => `<button class="ap-bg ${!S.amoled && S.bgTheme === k ? 'on' : ''}" data-bgt="${k}">
+        <span class="sw" style="background:${glows.map(([c, x, y, r, a]) => `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${c === 'accent' ? 'var(--accent)' : c}${c === 'accent' ? '' : Math.round(Math.min(.6, a * 1.6) * 255).toString(16).padStart(2, '0')}, transparent ${Math.round(r * 70)}%)`).concat([bg]).join(', ')}">
+          <i style="background:${s1}"></i><i style="background:${s2};width:70%"></i>${ic('check')}</span><b>${T(n)}</b><small class="dim">${T(about)}</small></button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row"><div><b>${T("AMOLED black")}</b><small>${T("Use pure black backgrounds for OLED screens")}</small></div>${sw('amoled', S.amoled)}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("Startup animation")}</b><small>${T("The wand writes the L when Lumio opens (any key or tap skips it)")}</small></div>${sw('apintro', S.intro !== false)}</div>
       ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; plays at your media volume and never over your music")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Trailers")}</b><small class="dim">${T("Trailers play by themselves at the top of a title's page")}</small>
-      <div class="chips" style="padding-top:12px">${[['sound', 'With sound'], ['muted', 'Muted'], ['off', 'Off']].map(([k, n]) => `<button class="chip ${S.trailers === k ? 'on' : ''}" data-trl="${k}">${T(n)}</button>`).join('')}</div></div></div>
+      <div class="chips" style="padding-top:12px">${[['sound', 'With sound'], ['muted', 'Muted'], ['off', 'Off']].map(([k, n]) => `<button class="chip ${S.trailers === k ? 'on' : ''}" data-trl="${k}">${T(n)}</button>`).join('')}</div></div>
+      <div class="set-row"><div><b>${T("Anti Spoiler")}</b><small>${T("Hide pictures and descriptions of episodes you haven't watched")}</small></div>${sw('antisp', !!S.antiSpoiler)}</div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Title colour")}</b><small class="dim">${T("Page titles and section headings")}</small>
       <div class="colors" style="padding-top:14px">${TITLES.map(([k, n, c]) => `<button class="dot ${S.titleColor === k ? 'on' : ''}" data-title="${k}"><i style="background:${c || 'var(--accent)'}">${ic('check')}</i>${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row" style="display:block"><b>${T("Arabic font")}</b><small class="dim">${T("Used when the app is in Arabic. Movie titles stay in English letters.")}</small>
@@ -3049,6 +3079,8 @@ function appearanceView() {
   const set = patch => { Object.assign(S, patch); saveSettings(); appearanceView(); };
   $('#apcin').onclick = () => set({ accent: 'cinema', titleColor: 'cinema', arabicFont: 'cinema', iconColor: 'cinema' });
   $('#amoled').onclick = () => set({ amoled: !S.amoled });
+  $('#antisp').onclick = () => set({ antiSpoiler: !S.antiSpoiler });
+  view.querySelectorAll('[data-bgt]').forEach(b => b.onclick = () => set({ bgTheme: b.dataset.bgt, amoled: false }));
   $('#apintro').onclick = () => set({ intro: S.intro === false });
   $('#apintros') && ($('#apintros').onclick = () => set({ introSound: S.introSound === false }));
   view.querySelectorAll('[data-acc]').forEach(b => b.onclick = () => set({ accent: b.dataset.acc }));
