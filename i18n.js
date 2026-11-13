@@ -987,5 +987,12 @@ window.LUMIO_AR = {
 "Neutral grey, no colour cast": "رمادي محايد بلا ألوان",
 "Anti Spoiler": "منع الحرق",
 "Hide pictures and descriptions of episodes you haven't watched": "إخفاء صور ووصف الحلقات التي لم تشاهدها",
-"Hidden until you've watched it": "مخفي حتى تشاهده"
+"Hidden until you've watched it": "مخفي حتى تشاهده",
+"Sources": "المصادر",
+"Other sources": "مصادر أخرى",
+"Now playing": "يُعرض الآن",
+"Finding servers…": "جارٍ البحث عن الخوادم…",
+"Switching source…": "جارٍ تبديل المصدر…",
+"Other sources aren't available for this video.": "لا تتوفر مصادر أخرى لهذا الفيديو.",
+"Couldn't load sources.": "تعذّر تحميل المصادر."
 };

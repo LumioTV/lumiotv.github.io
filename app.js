@@ -720,9 +720,17 @@ let toastTimer;
 function toast(msg) { const t = $('#toast'); t.textContent = T(msg); t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200); }
 
 async function getJSON(url, timeout = 15000) {
-  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeout);
-  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
-  finally { clearTimeout(tm); }
+  // A busy server (429 "too many requests", 5xx) is asked again up to twice, after a short wait
+  for (let attempt = 0; ; attempt++) {
+    const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (r.ok) return await r.json();
+      if ((r.status !== 429 && r.status < 500) || attempt >= 2) throw new Error('HTTP ' + r.status);
+      const after = Number(r.headers.get('Retry-After')) * 1000;
+      await new Promise(res => setTimeout(res, Math.min(3000, Math.max(300, after || 700 * 2 ** attempt))));
+    } finally { clearTimeout(tm); }
+  }
 }
 const cache = new Map();
 /** Arabic: the story, tagline and biography in Arabic wherever TMDB has them (titles stay English, like the apps). */
@@ -785,10 +793,30 @@ function pickLogo(logos) {
   const want = S.lang === 'ar' ? 'ar' : 'en', rank = l => l.iso_639_1 === want ? 0 : l.iso_639_1 === 'en' ? 1 : !l.iso_639_1 ? 2 : 3;
   return (logos || []).filter(l => !/\.svg$/i.test(l.file_path)).sort((a, b) => rank(a) - rank(b) || (b.vote_average || 0) - (a.vote_average || 0))[0]?.file_path || null;
 }
-const logoCache = new Map();
+// Title logos, kept in this browser so a title shows its real name art straight away next time. Only real answers are
+// kept: a failed lookup (no connection, TMDB busy) is asked again (once now, and on the next visit) instead of leaving
+// the plain-text name in place.
+const logoCache = new Map(), LOGO_KEY = 'lumio.logos.v1';
+let logoStore = null;
+const logoDisk = () => { if (!logoStore) { try { logoStore = JSON.parse(localStorage.getItem(LOGO_KEY) || '{}') || {}; } catch { logoStore = {}; } } return logoStore; };
+let logoSaveT;
+const logoSave = () => { clearTimeout(logoSaveT); logoSaveT = setTimeout(() => {
+  try { const e = Object.entries(logoDisk()); if (e.length > 3000) logoStore = Object.fromEntries(e.sort((a, b) => b[1][1] - a[1][1]).slice(0, 2500)); localStorage.setItem(LOGO_KEY, JSON.stringify(logoStore)); } catch { }
+}, 800); };
+/** Already known: the path, '' = the title has none, undefined = not looked up yet (or kept too long). */
+function knownLogo(type, id) {
+  const v = logoDisk()[`${type}-${id}-${S.lang === 'ar' ? 'ar' : 'en'}`];
+  return v && Date.now() - v[1] < (v[0] ? 21 : 3) * 864e5 ? v[0] : undefined;
+}
 function logoPath(type, id) {
-  const k = `${type}-${id}-${S.lang}`;
-  if (!logoCache.has(k)) logoCache.set(k, tmdb(`${type}/${id}/images?include_image_language=ar,en,null`).then(r => pickLogo(r.logos)).catch(() => null));
+  const k = `${type}-${id}-${S.lang === 'ar' ? 'ar' : 'en'}`, known = knownLogo(type, id);
+  if (known !== undefined) return Promise.resolve(known || null);
+  if (!logoCache.has(k)) {
+    const ask = () => tmdb(`${type}/${id}/images?include_image_language=ar,en,null`).then(r => pickLogo(r.logos));
+    logoCache.set(k, ask().catch(() => new Promise(res => setTimeout(res, 2000)).then(ask))
+      .then(p => { logoDisk()[k] = [p || '', Date.now()]; logoSave(); return p; })
+      .catch(() => { logoCache.delete(k); return null; }));
+  }
   return logoCache.get(k);
 }
 /** Age rating (your region, else US / UK / …) and what the title contains, from TMDB — same rules as the apps. */
@@ -1169,8 +1197,11 @@ async function homeView(token) {
       <div class="row-btns" style="justify-content:${wide ? 'flex-start' : 'center'}"><a class="btn white" href="#/details/${x.media_type}/${x.id}">${ic('play')}${T("Play")}</a><a class="btn tonal" href="#/details/${x.media_type}/${x.id}">${ic('info')}${T("Details")}</a></div>
       <div class="dots">${hero.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</div>`;
     info.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 350, easing: 'ease-out' });
-    // The title's own logo (held space while it's looked up, so the name never flashes first)
-    logoPath(x.media_type, x.id).then(path => { const box = $('#hero-logo'); if (box && idx === i) box.innerHTML = titleArt(path, titleOf(x)); });
+    // The title's own logo (space held for a moment while it's looked up; then the name shows until the logo arrives)
+    const put = path => { const box = $('#hero-logo'); if (box && idx === i) box.innerHTML = titleArt(path, titleOf(x)); };
+    let done = false;
+    const hold = setTimeout(() => { if (!done) put(null); }, 900);
+    logoPath(x.media_type, x.id).then(path => { done = true; clearTimeout(hold); if (path || !$('#hero-logo')?.firstChild) put(path); });
   };
   hero.forEach(x => logoPath(x.media_type, x.id));   // ready before their slide
   // The other slides' pictures download one step ahead of the carousel (all at once if you start swiping), so on a
