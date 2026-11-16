@@ -1133,7 +1133,7 @@ async function route() {
       case 'livetv': await liveTvView(token); break;
       case 'tv': await channelsView(args[0], args[1], token); break;
       case 'search': searchView(); break;
-      case 'library': libraryView(args[0]); break;
+      case 'library': await libraryView(args[0], token); break;
       case 'settings': settingsView(args[0] || ''); break;
       case 'appearance': appearanceView(); break;
       case 'party': partyView(args[0]); break;
@@ -1244,13 +1244,83 @@ function searchView() {
 }
 
 // ============================================================================ library
-function libraryView(tab = 'watchlist') {
-  const tabs = [['watchlist', 'Watchlist'], ['continue', 'Continue Watching'], ['history', 'History']];
+const LIB_TABS = [['watchlist', 'Watchlist'], ['continue', 'Continue Watching'], ['upcoming', 'Coming up'], ['history', 'History']];
+const libraryHead = tab => `<h1 class="page-title gutter">${T("Library")}</h1>
+    <div class="chips gutter">${LIB_TABS.map(([k, l]) => `<a class="chip ${k === tab ? 'on' : ''}" style="display:grid;place-items:center" href="#/library/${k}">${T(l)}</a>`).join('')}</div>`;
+function libraryView(tab = 'watchlist', token) {
+  if (tab === 'upcoming') return upcomingView(token);
   const list = tab === 'continue' ? LIB.filter(isContinue) : tab === 'history' ? LIB.filter(e => e.pos > 0) : LIB.filter(e => e.watch);
-  view.innerHTML = `<h1 class="page-title gutter">${T("Library")}</h1>
-    <div class="chips gutter">${tabs.map(([k, l]) => `<a class="chip ${k === tab ? 'on' : ''}" style="display:grid;place-items:center" href="#/library/${k}">${T(l)}</a>`).join('')}</div>
+  view.innerHTML = `${libraryHead(tab)}
     ${list.length ? `<div class="gutter" style="padding-top:12px"><div class="grid">${list.map((e, i) => posterCard({ id: e.id, media_type: e.type, title: e.title, poster_path: e.poster }, i, tab === 'watchlist' ? 0 : progressOf(e), tab === 'continue')).join('')}</div></div>`
       : msg('Nothing here yet', tab === 'watchlist' ? 'Tap the bookmark on any title to save it.' : 'Start watching something!')}`;
+}
+
+// ---------------------------------------------------------------------------- Library → Coming up
+// The next episodes of shows you follow and saved films that aren't out yet, by day. Same rules as the apps (data/Upcoming.kt).
+const UP_MAX = 40;
+/** The titles worth asking about, most recently touched first: shows you follow (saved or started), saved films you haven't seen. */
+function upCandidates(lib, max = UP_MAX) {
+  return lib.filter(e => (e.title || '').trim() && (e.type === 'tv' ? (e.watch || e.season != null || (e.eps || []).length > 0) : e.type === 'movie' && e.watch && !e.watched))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, max);
+}
+function upDay(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split('-').map(Number), t = Date.UTC(y, m - 1, d), back = new Date(t);
+  return back.getUTCMonth() === m - 1 && back.getUTCDate() === d ? t : null;       // "2026-13-45" is not a day
+}
+/** Days from today to date (negative = past); null when either isn't a real date. */
+function upDays(date, today) { const a = upDay(today), b = upDay(date); return a == null || b == null ? null : Math.round((b - a) / 864e5); }
+/** What comes next for a library title → something coming up, or null: no date, already out, or more than a year away. */
+function upItem(e, next, today) {
+  const days = next && next.date ? upDays(next.date, today) : null;
+  if (days == null || days < 0 || days > 365) return null;
+  const tv = e.type === 'tv';
+  return { type: e.type, id: e.id, title: e.title, poster: e.poster || null, date: next.date,
+    season: tv ? next.season ?? null : null, episode: tv ? next.episode ?? null : null, name: tv ? String(next.name || '').trim() || null : null };
+}
+/** Soonest first (same day: by name), each title once, in the groups that have something. */
+function upGroups(items, today) {
+  const seen = new Set(), out = ['Today', 'Tomorrow', 'This week', 'Later'].map(bucket => ({ bucket, items: [] }));
+  items.filter(i => !seen.has(i.type + '-' + i.id) && seen.add(i.type + '-' + i.id))
+    .map(i => [upDays(i.date, today), i]).filter(([d]) => d != null && d >= 0)
+    .sort((a, b) => a[0] - b[0] || a[1].title.toLowerCase().localeCompare(b[1].title.toLowerCase()))
+    .forEach(([d, i]) => out[d === 0 ? 0 : d === 1 ? 1 : d <= 6 ? 2 : 3].items.push(i));
+  return out.filter(g => g.items.length);
+}
+/** Library → Coming up: the page. Answers are kept for 3 hours, so coming back asks nothing again. */
+const UP_CACHE = new Map();
+async function upNext(type, id) {
+  const k = type + '-' + id, hit = UP_CACHE.get(k);
+  if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.next;
+  // one plain request: only dates and numbers are read, so no Arabic text is fetched alongside
+  const d = await getJSON(`https://api.themoviedb.org/3/${type}/${id}?api_key=${(S.tmdbKey || '').trim() || BUILT_IN_TMDB_KEY}&language=en-US`);
+  const n = d.next_episode_to_air, next = type === 'tv' ? (n ? { date: n.air_date, season: n.season_number, episode: n.episode_number, name: n.name } : null) : (d.release_date ? { date: d.release_date } : null);
+  UP_CACHE.set(k, { at: Date.now(), next });
+  return next;
+}
+function upCard(x, i, today) {
+  const day = new Date(upDay(x.date)), lang = S.lang === 'ar' ? 'ar' : 'en', soon = upDays(x.date, today) <= 6;
+  const top = day.toLocaleDateString(lang, soon ? { weekday: 'short', timeZone: 'UTC' } : { month: 'short', timeZone: 'UTC' });
+  const line = x.type === 'tv' ? [x.season != null && x.episode != null ? `S${x.season} E${x.episode}` : '', x.name || ''].filter(Boolean).join(' · ') || T('Series') : T('Movie');
+  return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${x.type}/${x.id}" data-k="${x.type}-${x.id}" data-type="${x.type}" data-id="${x.id}" data-title="${esc(x.title)}" data-poster="${esc(x.poster || '')}">
+    <div class="art">${img(x.poster && IMG + 'w342' + x.poster, x.title)}<span class="leaf"><i>${esc(top)}</i><b>${day.getUTCDate()}</b></span></div>
+    <div class="t">${esc(x.title)}</div><div class="y">${esc(line)}</div></a>`;
+}
+async function upcomingView(token) {
+  const head = libraryHead('upcoming'), now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const wanted = upCandidates(LIB), empty = () => msg('Nothing coming up yet', 'Save a show to your watchlist and its next episode appears here, with the day it comes out.');
+  if (!wanted.length) { view.innerHTML = head + empty(); return; }
+  view.innerHTML = `${head}<div class="gutter" style="padding-top:12px"><div class="grid">${Array.from({ length: 6 }, () => '<div class="sk" style="aspect-ratio:2/3"></div>').join('')}</div></div>`;
+  let failed = 0; const items = [];
+  for (let i = 0; i < wanted.length; i += 5) {       // five at a time
+    const part = await Promise.all(wanted.slice(i, i + 5).map(e => upNext(e.type, e.id).then(n => upItem(e, n, today), () => { failed++; return null; })));
+    if (token !== routeToken) return;
+    items.push(...part.filter(Boolean));
+  }
+  const groups = upGroups(items, today);
+  view.innerHTML = head + (groups.length
+    ? groups.map(g => `<div class="rail-title gutter">${esc(T(g.bucket))}</div><div class="gutter"><div class="grid">${g.items.map((x, i) => upCard(x, i, today)).join('')}</div></div>`).join('')
+    : failed === wanted.length ? msg("Couldn't load", 'Check your connection and try again.', `<button class="btn acc" data-act="retry">${esc(T('Retry'))}</button>`) : empty());
 }
 
 // ============================================================================ catalog
@@ -1681,6 +1751,7 @@ async function detailsView(type, id, token) {
           <div class="genres">${esc((d.genres || []).map(g => g.name).join(' • '))}</div>
           <div class="row-btns"><a class="btn white" id="d-play" href="${playHref}" title="${T('Hold or right-click to choose the source yourself')}">${ic('play')}${esc(playLabel)}</a>
           <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button>
+          ${SESSION ? `<button class="icon-btn" id="d-tv" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Play on TV'))}" title="${esc(T('Play on TV'))}">${ic('livetv')}</button>` : ''}
           ${bestTrailer(d.videos) ? `<button class="btn tonal" id="d-tr">${ic('movie')}${T('Trailer')}</button>` : ''}</div>
         </div></div></div>
     <p class="overview gutter">${esc(d.overview)}</p>
@@ -1705,6 +1776,7 @@ async function detailsView(type, id, token) {
   }, 1200);
   // Play: the best stream straight away; hold / right-click: the sources list
   tapOrHold($('#d-play'), () => quickPlay(type, id, type === 'tv' ? (resume?.season || season) : null, type === 'tv' ? (resume?.episode || 1) : null), () => { location.hash = playHref; });
+  if ($('#d-tv')) $('#d-tv').onclick = () => playOnTv({ type, id, title: titleOf(d), season: type === 'tv' ? (resume?.season || season) : null, episode: type === 'tv' ? (resume?.episode || 1) : null });
   $('#wl').onclick = () => {
     updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, { watch: !(cur && cur.watch) }));
     const on = libEntry(type, id)?.watch; $('#wl').innerHTML = ic(on ? 'bookmark' : 'bookmarkO'); toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
@@ -1912,6 +1984,87 @@ function promptSheet(title, placeholder, onOk) {
   const root = sheet(title, [], `<form class="pad" id="pf"><input class="field" id="pv" type="url" placeholder="${esc(placeholder)}" autocomplete="off" required><button class="btn acc" type="submit">${T("OK")}</button></form>`);
   const f = $('#pf', root); setTimeout(() => $('#pv', root).focus(), 50);
   f.onsubmit = e => { e.preventDefault(); const v = $('#pv', root).value.trim(); closeSheet(); if (v) onOk(v); };
+}
+
+// ============================================================================ Play on TV (Lumio Link)
+// The account's private channel (supabase/link.sql): the database lets only this account's signed-in devices join it.
+// The website only ever sends "play <TMDB id>" to a TV you pick — never a link; the TV finds its own server.
+const LINK = { ws: null, ref: 0, joinRef: null, joined: false, presence: {}, hb: null, idle: null, since: 0, want: null };
+const linkClean = (s, max) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max).trim();
+function linkId() {
+  let v = raw.get('lumio.link.id');
+  if (!/^web-[0-9a-f]{12}$/.test(v || '')) { v = 'web-' + [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join(''); raw.set('lumio.link.id', v); }
+  return v;
+}
+const linkTopic = () => 'realtime:lumio-link:' + String(SESSION?.uid || '').toLowerCase();
+function linkTvs() {
+  return Object.entries(LINK.presence).map(([id, metas]) => ({ id, m: metas[metas.length - 1] || {} }))
+    .filter(d => /^[A-Za-z0-9-]{4,40}$/.test(d.id) && d.m.platform === 'tv')
+    .map(d => ({ id: d.id, name: linkClean(d.m.name, 40) || 'TV', playing: linkClean(d.m.playing, 80) }))
+    .sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12);
+}
+function linkSend(event, payload, topic) {
+  const t = topic || linkTopic(), msg = { topic: t, event, payload, ref: String(++LINK.ref) };
+  if (t !== 'phoenix' && LINK.joinRef) msg.join_ref = LINK.joinRef;
+  try { if (LINK.ws?.readyState === 1) { LINK.ws.send(JSON.stringify(msg)); return true; } } catch { /* closed meanwhile */ }
+  return false;
+}
+function linkClose() {
+  clearInterval(LINK.hb); clearInterval(LINK.idle);
+  const ws = LINK.ws; Object.assign(LINK, { ws: null, joinRef: null, joined: false, presence: {}, hb: null, idle: null });
+  try { ws?.close(); } catch { /* already closed */ }
+}
+async function linkConnect() {
+  if (LINK.ws || !/^[0-9a-f-]{36}$/i.test(SESSION?.uid || '')) return;
+  LINK.since = Date.now();
+  let token; try { token = await sbToken(); } catch { return; }
+  if (LINK.ws) return;
+  const ws = new WebSocket(SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0'), topic = linkTopic();
+  LINK.ws = ws;
+  ws.onopen = () => {
+    LINK.joinRef = String(++LINK.ref);
+    ws.send(JSON.stringify({ topic, event: 'phx_join', ref: LINK.joinRef, join_ref: LINK.joinRef,
+      payload: { config: { broadcast: { self: false, ack: false }, presence: { key: linkId(), enabled: true }, private: true }, access_token: token } }));
+    LINK.hb = setInterval(() => linkSend('heartbeat', {}, 'phoenix'), 25000);
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (LINK.ws !== ws || m.topic !== topic) return;
+    const p = m.payload || {};
+    if (m.event === 'phx_reply' && m.ref === LINK.joinRef) {
+      if (p.status !== 'ok') return linkClose();
+      LINK.joined = true; linkSend('presence', { type: 'presence', event: 'track', payload: { name: 'Web', platform: 'web' } });
+    } else if (m.event === 'presence_state') { LINK.presence = {}; for (const [k, v] of Object.entries(p)) LINK.presence[k] = v.metas || []; }
+    else if (m.event === 'presence_diff') {
+      for (const [k, v] of Object.entries(p.joins || {})) LINK.presence[k] = (LINK.presence[k] || []).concat(v.metas || []);
+      for (const [k, v] of Object.entries(p.leaves || {})) {
+        const gone = new Set((v.metas || []).map(x => x.phx_ref));
+        LINK.presence[k] = (LINK.presence[k] || []).filter(x => !gone.has(x.phx_ref)); if (!LINK.presence[k].length) delete LINK.presence[k];
+      }
+    } else if (m.event === 'phx_error' || m.event === 'phx_close') return linkClose();
+    linkSheet();
+  };
+  ws.onclose = () => { if (LINK.ws === ws) linkClose(); linkSheet(); };
+  // the connection lives only while the picker is open
+  LINK.idle = setInterval(() => { if (!$('#link-mark')) linkClose(); }, 15000);
+}
+function linkSheet(open) {
+  if (!open && !$('#link-mark')) return;
+  const tvs = linkTvs(), looking = !tvs.length && Date.now() - LINK.since < 6000;
+  sheet('Play on TV', tvs.map(tv => ({ t: tv.name, s: tv.playing ? T('Playing') + ': ' + tv.playing : 'Ready', icon: 'livetv', fn: () => linkPlay(tv) })),
+    `<div class="pad" id="link-mark" role="status"><span class="dim">${esc(T(tvs.length ? 'TVs signed in to your account with Lumio open' : looking ? 'Looking for your TVs…' : 'No TV found. Open Lumio on your TV, signed in to the same account.'))}</span></div>`);
+}
+function linkPlay(tv) {
+  const w = LINK.want; if (!w) return;
+  const payload = { to: tv.id, c: 'play', type: w.type, id: +w.id, title: linkClean(w.title, 120) };
+  if (w.type === 'tv' && w.season != null && w.episode != null) { payload.s = +w.season; payload.e = +w.episode; }
+  const sent = linkSend('broadcast', { type: 'broadcast', event: 'cmd', payload });
+  toast(sent ? T('Playing on') + ' ' + tv.name : "Couldn't reach the TV. Try again.");
+}
+/** The title page's "Play on TV" button: pick one of your TVs (signed in to this account, Lumio open) and it plays there. */
+function playOnTv(want) {
+  LINK.want = want; linkConnect(); linkSheet(true);
+  setTimeout(linkSheet, 6100);   // "Looking…" becomes "No TV found" if none answered
 }
 
 // ============================================================================ player

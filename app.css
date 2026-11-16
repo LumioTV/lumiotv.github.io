@@ -135,6 +135,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--display); }
 .poster .art img.ok { opacity: 1; }
 .poster .rate { position: absolute; top: 6px; inset-inline-start: 6px; font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 6px; background: rgba(0,0,0,.65); }
 .poster .rate b { color: #FFC94D; }
+/* Library → Coming up: the day it comes out, as a little calendar leaf on the poster */
+.poster .leaf { position: absolute; top: 6px; inset-inline-start: 6px; min-width: 40px; padding: 4px 8px; border-radius: 9px; background: rgba(0,0,0,.74); display: grid; justify-items: center; }
+.poster .leaf i { font-style: normal; font-size: 10px; line-height: 12px; font-weight: 700; color: rgba(255,255,255,.74); }
+.poster .leaf b { font-size: 18px; line-height: 20px; font-weight: 700; color: #fff; }
 .poster .prog { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.5); }
 .poster .prog i { display: block; height: 100%; background: var(--accent); }
 .poster .t { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
