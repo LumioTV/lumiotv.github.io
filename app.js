@@ -1986,6 +1986,37 @@ function promptSheet(title, placeholder, onOk) {
   f.onsubmit = e => { e.preventDefault(); const v = $('#pv', root).value.trim(); closeSheet(); if (v) onOk(v); };
 }
 
+// ---------------------------------------------------------------------------- live rooms (shared)
+// The pieces watch parties and Play on TV both need to talk on a Supabase realtime channel. A "room" is any object
+// with { ws, ref, joinRef, hb, presence }.
+const rtSocket = () => new WebSocket(SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0');
+/** Sends one message on the room's socket; false when it isn't open. */
+function rtSend(room, topic, event, payload) {
+  const msg = { topic, event, payload, ref: String(++room.ref) };
+  if (topic !== 'phoenix' && room.joinRef) msg.join_ref = room.joinRef;
+  try { if (room.ws?.readyState === 1) { room.ws.send(JSON.stringify(msg)); return true; } } catch { /* closed meanwhile */ }
+  return false;
+}
+/** Joins a topic on a socket that has just opened, and keeps the connection alive. */
+function rtJoin(room, ws, topic, presence, token, isPrivate) {
+  room.joinRef = String(++room.ref);
+  ws.send(JSON.stringify({ topic, event: 'phx_join', ref: room.joinRef, join_ref: room.joinRef,
+    payload: { config: { broadcast: { self: false, ack: false }, presence, private: isPrivate }, access_token: token } }));
+  clearInterval(room.hb); room.hb = setInterval(() => rtSend(room, 'phoenix', 'heartbeat', {}), 25000);
+}
+/** Keeps room.presence (who's here: key → their entries) up to date. True when the message was about presence. */
+function rtPresence(room, m) {
+  const p = m.payload || {};
+  if (m.event === 'presence_state') { room.presence = {}; for (const [k, v] of Object.entries(p)) room.presence[k] = v.metas || []; return true; }
+  if (m.event !== 'presence_diff') return false;
+  for (const [k, v] of Object.entries(p.joins || {})) room.presence[k] = (room.presence[k] || []).concat(v.metas || []);
+  for (const [k, v] of Object.entries(p.leaves || {})) {
+    const gone = new Set((v.metas || []).map(x => x.phx_ref));
+    room.presence[k] = (room.presence[k] || []).filter(x => !gone.has(x.phx_ref)); if (!room.presence[k].length) delete room.presence[k];
+  }
+  return true;
+}
+
 // ============================================================================ Play on TV (Lumio Link)
 // The account's private channel (supabase/link.sql): the database lets only this account's signed-in devices join it.
 // The website only ever sends "play <TMDB id>" to a TV you pick — never a link; the TV finds its own server.
@@ -2003,12 +2034,7 @@ function linkTvs() {
     .map(d => ({ id: d.id, name: linkClean(d.m.name, 40) || 'TV', playing: linkClean(d.m.playing, 80) }))
     .sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12);
 }
-function linkSend(event, payload, topic) {
-  const t = topic || linkTopic(), msg = { topic: t, event, payload, ref: String(++LINK.ref) };
-  if (t !== 'phoenix' && LINK.joinRef) msg.join_ref = LINK.joinRef;
-  try { if (LINK.ws?.readyState === 1) { LINK.ws.send(JSON.stringify(msg)); return true; } } catch { /* closed meanwhile */ }
-  return false;
-}
+const linkSend = (event, payload, topic) => rtSend(LINK, topic || linkTopic(), event, payload);
 function linkClose() {
   clearInterval(LINK.hb); clearInterval(LINK.idle);
   const ws = LINK.ws; Object.assign(LINK, { ws: null, joinRef: null, joined: false, presence: {}, hb: null, idle: null });
@@ -2019,14 +2045,9 @@ async function linkConnect() {
   LINK.since = Date.now();
   let token; try { token = await sbToken(); } catch { return; }
   if (LINK.ws) return;
-  const ws = new WebSocket(SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0'), topic = linkTopic();
+  const ws = rtSocket(), topic = linkTopic();
   LINK.ws = ws;
-  ws.onopen = () => {
-    LINK.joinRef = String(++LINK.ref);
-    ws.send(JSON.stringify({ topic, event: 'phx_join', ref: LINK.joinRef, join_ref: LINK.joinRef,
-      payload: { config: { broadcast: { self: false, ack: false }, presence: { key: linkId(), enabled: true }, private: true }, access_token: token } }));
-    LINK.hb = setInterval(() => linkSend('heartbeat', {}, 'phoenix'), 25000);
-  };
+  ws.onopen = () => rtJoin(LINK, ws, topic, { key: linkId(), enabled: true }, token, true);
   ws.onmessage = e => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (LINK.ws !== ws || m.topic !== topic) return;
@@ -2034,13 +2055,7 @@ async function linkConnect() {
     if (m.event === 'phx_reply' && m.ref === LINK.joinRef) {
       if (p.status !== 'ok') return linkClose();
       LINK.joined = true; linkSend('presence', { type: 'presence', event: 'track', payload: { name: 'Web', platform: 'web' } });
-    } else if (m.event === 'presence_state') { LINK.presence = {}; for (const [k, v] of Object.entries(p)) LINK.presence[k] = v.metas || []; }
-    else if (m.event === 'presence_diff') {
-      for (const [k, v] of Object.entries(p.joins || {})) LINK.presence[k] = (LINK.presence[k] || []).concat(v.metas || []);
-      for (const [k, v] of Object.entries(p.leaves || {})) {
-        const gone = new Set((v.metas || []).map(x => x.phx_ref));
-        LINK.presence[k] = (LINK.presence[k] || []).filter(x => !gone.has(x.phx_ref)); if (!LINK.presence[k].length) delete LINK.presence[k];
-      }
+    } else if (rtPresence(LINK, m)) { /* the list of TVs changed */
     } else if (m.event === 'phx_error' || m.event === 'phx_close') return linkClose();
     linkSheet();
   };
@@ -3298,24 +3313,14 @@ const inviteUrl = () => location.origin + location.pathname + '#/party/' + PARTY
 const pKey = t => t ? `${t.type}-${t.tmdbId}-${t.season || 0}-${t.episode || 0}` : '';
 const reqKey = r => r && r.id && r.type ? `${r.type}-${r.id}-${r.season || 0}-${r.episode || 0}` : '';
 
-function pSend(event, payload, topic) {
-  const t = topic || 'realtime:lumio-party-' + PARTY.code;
-  const msg = { topic: t, event, payload, ref: String(++PARTY.ref) };
-  if (t !== 'phoenix' && PARTY.joinRef) msg.join_ref = PARTY.joinRef;
-  try { PARTY.ws?.readyState === 1 && PARTY.ws.send(JSON.stringify(msg)); } catch { /* reconnects */ }
-}
+const pSend = (event, payload, topic) => { rtSend(PARTY, topic || 'realtime:lumio-party-' + PARTY.code, event, payload); };
 const pCast = (event, payload) => pSend('broadcast', { type: 'broadcast', event, payload });
 function pTrack() { if (PARTY.joined) pSend('presence', { type: 'presence', event: 'track', payload: { id: PARTY.id, name: myName(), device: 'web', joinedAt: PARTY.joinedAt } }); }
 
 function pConnect() {
-  const ws = new WebSocket(SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0');
+  const ws = rtSocket();
   PARTY.ws = ws;
-  ws.onopen = () => {
-    PARTY.joinRef = String(++PARTY.ref);
-    ws.send(JSON.stringify({ topic: 'realtime:lumio-party-' + PARTY.code, event: 'phx_join', ref: PARTY.joinRef, join_ref: PARTY.joinRef,
-      payload: { config: { broadcast: { self: false, ack: false }, presence: { key: PARTY.id }, private: false }, access_token: SB_KEY } }));
-    clearInterval(PARTY.hb); PARTY.hb = setInterval(() => pSend('heartbeat', {}, 'phoenix'), 25000);
-  };
+  ws.onopen = () => rtJoin(PARTY, ws, 'realtime:lumio-party-' + PARTY.code, { key: PARTY.id }, SB_KEY, false);
   ws.onmessage = e => { try { pOnMessage(JSON.parse(e.data)); } catch { /* ignore */ } };
   ws.onclose = () => {
     PARTY.joined = false; PARTY.connected = false; clearInterval(PARTY.hb); pRender();
@@ -3329,15 +3334,8 @@ function pOnMessage(m) {
   if (m.event === 'phx_reply' && m.ref === PARTY.joinRef) {
     if (p.status === 'ok') { PARTY.joined = true; PARTY.connected = true; PARTY.retry = 0; pTrack(); if (!isCtl()) pCast('hello', { from: PARTY.id }); pRender(); }
   } else if (m.event === 'broadcast') pHandle(p.event, p.payload || {});
-  else if (m.event === 'presence_state') { PARTY.presence = {}; for (const [k, v] of Object.entries(p)) PARTY.presence[k] = v.metas || []; pPresence(); }
-  else if (m.event === 'presence_diff') {
-    for (const [k, v] of Object.entries(p.joins || {})) PARTY.presence[k] = (PARTY.presence[k] || []).concat(v.metas || []);
-    for (const [k, v] of Object.entries(p.leaves || {})) {
-      const gone = new Set((v.metas || []).map(x => x.phx_ref));
-      PARTY.presence[k] = (PARTY.presence[k] || []).filter(x => !gone.has(x.phx_ref)); if (!PARTY.presence[k].length) delete PARTY.presence[k];
-    }
-    pPresence();
-  } else if (m.event === 'phx_error' || m.event === 'phx_close') PARTY.ws?.close();
+  else if (rtPresence(PARTY, m)) pPresence();
+  else if (m.event === 'phx_error' || m.event === 'phx_close') PARTY.ws?.close();
 }
 
 function partyStart(code) {
