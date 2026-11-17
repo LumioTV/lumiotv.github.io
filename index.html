@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- Security: only Lumio's own scripts (and two pinned libraries) may run; nothing inside the page's markup can run script. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-li0j05BIH+pwg8aWU6rqtLggAVDBQjAoRrKyvHYFKWA='; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob: wss://rdkkkoypfkwjzceswhrq.supabase.co; font-src 'self' data:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com 'sha256-li0j05BIH+pwg8aWU6rqtLggAVDBQjAoRrKyvHYFKWA='; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob: wss://rdkkkoypfkwjzceswhrq.supabase.co; font-src 'self' data:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <!-- Lumio moved to lumiotv.github.io: the old address forwards there (same page, keeps #/party/… links) -->
 <script>if (location.hostname === 'akalkandari.github.io') location.replace('https://lumiotv.github.io/' + location.search + location.hash);
@@ -23,16 +23,16 @@ if (window.top !== window.self) { try { window.top.location.replace(window.locat
 <link rel="preconnect" href="https://api.themoviedb.org">
 <link rel="preconnect" href="https://image.tmdb.org">
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-<link rel="stylesheet" href="app.css?v=dl4027x">
+<link rel="stylesheet" href="app.css?v=cast40">
 </head>
 <body>
   <main id="view" aria-live="polite"></main>
   <nav id="nav" class="glass-nav" aria-label="Main"></nav>
   <div id="sheet-root"></div>
   <div id="toast" role="status"></div>
-  <script src="i18n.js?v=dl4027x"></script>
-  <script src="scenes.js?v=dl4027x"></script>
-  <script src="franchise.js?v=dl4027x"></script>
-  <script src="app.js?v=dl4027x"></script>
+  <script src="i18n.js?v=cast40"></script>
+  <script src="scenes.js?v=cast40"></script>
+  <script src="franchise.js?v=cast40"></script>
+  <script src="app.js?v=cast40"></script>
 </body>
 </html>

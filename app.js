@@ -290,6 +290,8 @@ const P = {
   rew: 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z',
   fwd: 'M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z',
   download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
+  cast: 'M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z',
+  stop: 'M6 6h12v12H6z',
   close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
   check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   eyeoff: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z',
@@ -1752,7 +1754,7 @@ async function detailsView(type, id, token) {
           <div class="genres">${esc((d.genres || []).map(g => g.name).join(' • '))}</div>
           <div class="row-btns"><a class="btn white" id="d-play" href="${playHref}" title="${T('Hold or right-click to choose the source yourself')}">${ic('play')}${esc(playLabel)}</a>
           <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button>
-          ${SESSION ? `<button class="icon-btn" id="d-tv" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Play on TV'))}" title="${esc(T('Play on TV'))}">${ic('livetv')}</button>` : ''}
+          ${SESSION || /Chrome\//.test(navigator.userAgent) ? `<button class="icon-btn" id="d-tv" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Cast to TV'))}" title="${esc(T('Cast to TV'))}">${ic('cast')}</button>` : ''}
           <button class="icon-btn" id="d-dl" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Download'))}" title="${esc(T('Download'))}">${ic('download')}</button>
           ${bestTrailer(d.videos) ? `<button class="btn tonal" id="d-tr">${ic('movie')}${T('Trailer')}</button>` : ''}</div>
         </div></div></div>
@@ -2112,6 +2114,7 @@ async function linkConnect() {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (LINK.ws !== ws || m.topic !== topic) return;
     const p = m.payload || {};
+    if (m.event === 'broadcast' && p.event === 'state') { castHeard(p.payload); return; }   // Cast to TV: what the TV is playing
     if (m.event === 'phx_reply' && m.ref === LINK.joinRef) {
       if (p.status !== 'ok') return linkClose();
       LINK.joined = true; linkSend('presence', { type: 'presence', event: 'track', payload: { name: 'Web', platform: 'web' } });
@@ -2121,12 +2124,13 @@ async function linkConnect() {
   };
   ws.onclose = () => { if (LINK.ws === ws) linkClose(); linkSheet(); };
   // the connection lives only while the picker is open
-  LINK.idle = setInterval(() => { if (!$('#link-mark')) linkClose(); }, 15000);
+  LINK.idle = setInterval(() => { if (!$('#link-mark') && !(CAST.kind === 'lumio' && $('#cast-card'))) linkClose(); }, 15000);
 }
 function linkSheet(open) {
   if (!open && !$('#link-mark')) return;
   const tvs = linkTvs(), looking = !tvs.length && Date.now() - LINK.since < 6000;
-  sheet('Play on TV', tvs.map(tv => ({ t: tv.name, s: tv.playing ? T('Playing') + ': ' + tv.playing : 'Ready', icon: 'livetv', fn: () => linkPlay(tv) })),
+  const cc = /Chrome\//.test(navigator.userAgent) ? [{ t: 'Chromecast or Google TV', s: 'Pick it in Chrome’s list', icon: 'cast', fn: () => chromecastPlay(LINK.want) }] : [];
+  sheet('Cast to TV', (SESSION ? tvs.map(tv => ({ t: tv.name, s: tv.playing ? T('Playing') + ': ' + tv.playing : 'Ready', icon: 'livetv', fn: () => linkPlay(tv) })) : []).concat(cc),
     `<div class="pad" id="link-mark" role="status"><span class="dim">${esc(T(tvs.length ? 'TVs signed in to your account with Lumio open' : looking ? 'Looking for your TVs…' : 'No TV found. Open Lumio on your TV, signed in to the same account.'))}</span></div>`);
 }
 function linkPlay(tv) {
@@ -2135,11 +2139,173 @@ function linkPlay(tv) {
   if (w.type === 'tv' && w.season != null && w.episode != null) { payload.s = +w.season; payload.e = +w.episode; }
   const sent = linkSend('broadcast', { type: 'broadcast', event: 'cmd', payload });
   toast(sent ? T('Playing on') + ' ' + tv.name : "Couldn't reach the TV. Try again.");
+  if (sent) { Object.assign(CAST, { kind: 'lumio', tv: { id: tv.id, name: tv.name }, np: null }); castOpen(); }
 }
 /** The title page's "Play on TV" button: pick one of your TVs (signed in to this account, Lumio open) and it plays there. */
 function playOnTv(want) {
-  LINK.want = want; linkConnect(); linkSheet(true);
+  // already casting this to a Chromecast: its controls come back
+  if (CAST.kind === 'chromecast' && CAST.np) return castOpen();
+  LINK.want = want; if (SESSION) linkConnect(); linkSheet(true);
   setTimeout(linkSheet, 6100);   // "Looking…" becomes "No TV found" if none answered
+}
+
+// ---- Cast to TV: the TV's report and the now-playing controls (the same checks as the app's LinkProtocol)
+const CAST_SUB = /^(off|t[0-9]{1,3})$/, CAST_AUD = /^a[0-9]{1,3}$/, CAST_PIC = /^\/[A-Za-z0-9_-]{1,80}\.(jpg|png|webp)$/, CAST_DAY = 86400000;
+const castNum = v => typeof v === 'number' && isFinite(v) ? v : null;
+/** A TV's report if it passes every check (text cleaned, pictures TMDB paths only, numbers in range); otherwise null. */
+function castDecode(p) {
+  if (!p || typeof p !== 'object') return null;
+  const from = typeof p.from === 'string' && /^[A-Za-z0-9-]{4,40}$/.test(p.from) ? p.from : null;
+  const pos = castNum(p.pos), dur = castNum(p.dur);
+  if (!from || pos == null || dur == null || pos < 0 || dur < 0 || pos > CAST_DAY || dur > CAST_DAY) return null;
+  const list = (k, rx) => (Array.isArray(p[k]) ? p[k] : []).filter(o => o && typeof o.id === 'string' && rx.test(o.id) && o.id !== 'off')
+    .map(o => ({ id: o.id, label: linkClean(typeof o.l === 'string' ? o.l : '', 60) || o.id })).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 40);
+  const str = (k, max) => linkClean(typeof p[k] === 'string' ? p[k] : '', max);
+  const pic = k => typeof p[k] === 'string' && CAST_PIC.test(p[k]) ? p[k] : null;
+  return { from, title: str('t', 120), subtitle: str('st', 80), poster: pic('poster'), backdrop: pic('bd'), pos: Math.min(pos, dur > 0 ? dur : CAST_DAY), dur,
+    playing: p.on === true, busy: p.busy === true, subs: list('subs', CAST_SUB), sub: typeof p.sub === 'string' && CAST_SUB.test(p.sub) ? p.sub : 'off',
+    audios: list('auds', CAST_AUD), audio: typeof p.aud === 'string' && CAST_AUD.test(p.aud) ? p.aud : '',
+    size: Math.min(250, Math.max(50, Math.round(castNum(p.size) ?? 100))), bg: p.bg === true, bold: p.bold === true };
+}
+/** A control for the TV — only ones the TV accepts (it checks again). */
+function castCtl(to, a, v = 0, k = '') {
+  const ok = { toggle: true, stop: true, seek: v >= 0 && v <= CAST_DAY, skip: v >= -600000 && v <= 600000, sub: CAST_SUB.test(k), audio: CAST_AUD.test(k),
+    subSize: v >= 50 && v <= 250, subBg: v === 0 || v === 1, subBold: v === 0 || v === 1 }[a];
+  if (!ok || typeof to !== 'string' || !/^[A-Za-z0-9-]{4,40}$/.test(to)) return null;
+  const p = { to, c: 'ctl', a, v: Math.round(v) }; if (a === 'sub' || a === 'audio') p.k = k;
+  return p;
+}
+/** The copy a Chromecast gets (the app's CastPick): plain H.264 MP4 / HLS up to 1080p first, never 4K unless that's all. */
+function castPick(ranked) {
+  const small = ranked.filter(x => x.q !== '4K'), t = x => `${x.label || ''} ${x.details || ''}`;
+  const hevc = x => /X265|HEVC|H\.?265/i.test(t(x)), plain = x => /\.(mp4|m4v|m3u8)$/i.test(String(x.url || '').split('?')[0]) || /\bMP4\b/i.test(t(x));
+  return small.find(x => !hevc(x) && plain(x)) || small.find(x => !hevc(x)) || small[0] || ranked[0] || null;
+}
+/** The now-playing card (Lumio TV or Chromecast) */
+const CAST = { kind: null, tv: null, np: null, tab: 0, tracks: false, dragging: false, cc: null };
+function castHeard(payload) {
+  const s = castDecode(payload);
+  if (!s || CAST.kind !== 'lumio' || !CAST.tv || s.from !== CAST.tv.id) return;
+  const first = !CAST.np; CAST.np = s;
+  first ? castOpen(true) : castUpdate();
+}
+function castSend(a, v = 0, k = '') {
+  if (CAST.kind === 'chromecast') return chromecastCtl(a, v, k);
+  const p = castCtl(CAST.tv?.id, a, v, k);
+  if (p) linkSend('broadcast', { type: 'broadcast', event: 'cmd', payload: p });
+}
+function castOpen(keep) {
+  if (keep && !$('#cast-card')) return;
+  const np = CAST.np, root = $('#sheet-root');
+  const head = `<div class="cc-top"><span class="cc-chip">${ic('cast')}${esc(CAST.tv?.name || 'TV')}</span><button class="cc-x" id="cc-x">${T('Disconnect')}</button></div>`;
+  if (!np) {
+    root.innerHTML = `<div class="sheet-bg"></div><div class="sheet cast-sheet" role="dialog" aria-label="${esc(T('Cast to TV'))}"><div class="grab"></div><div id="cast-card">${head}
+      <div class="dl-busy"><span class="mini-spin"></span>${esc(T('Starting on'))} ${esc(CAST.tv?.name || 'TV')}…</div></div></div>`;
+  } else {
+    const pic = np.backdrop || np.poster, web = CAST.kind === 'chromecast';
+    const tabs = ['Subtitles', 'Audio', 'Style'].map((n, i) => `<button class="${CAST.tab === i ? 'on' : ''}" data-tab="${i}">${T(n)}</button>`).join('');
+    const row = (label, on, a, k, v = 0) => `<button class="cc-opt ${on ? 'on' : ''}" data-a="${a}" data-k="${esc(k)}" data-v="${v}">${esc(label)}${on ? ic('check') : ''}</button>`;
+    const list = CAST.tab === 0 ? (web && !np.subs.length ? `<p class="dim">${T('Subtitles from the website aren’t available on a Chromecast. Cast from the phone app to get them.')}</p>`
+        : row(T('Off'), np.sub === 'off', 'sub', 'off') + np.subs.map(s => row(s.label, np.sub === s.id, 'sub', s.id)).join('') + (np.subs.length ? '' : `<p class="dim">${T('This video has no subtitles of its own. Add one on the TV from its Subtitles menu.')}</p>`))
+      : CAST.tab === 1 ? np.audios.map(x => row(x.label, np.audio === x.id, 'audio', x.id)).join('') + (np.audios.length > 1 ? '' : `<p class="dim">${T('No other sound tracks in this video.')}</p>`)
+      : web ? `<p class="dim">${T('Subtitle style can be changed when casting to a Lumio TV.')}</p>`
+      : `<div class="cc-size"><span>${T('Subtitle size')}</span><button data-a="subSize" data-v="${Math.max(50, np.size - 10)}">−</button><b>${np.size}%</b><button data-a="subSize" data-v="${Math.min(250, np.size + 10)}">+</button></div>`
+        + row(T('Background box'), np.bg, 'subBg', '', np.bg ? 0 : 1) + row(T('Bold'), np.bold, 'subBold', '', np.bold ? 0 : 1);
+    root.innerHTML = `<div class="sheet-bg"></div><div class="sheet cast-sheet" role="dialog" aria-label="${esc(T('Cast to TV'))}"><div class="grab"></div><div id="cast-card">${head}
+      <div class="cc-art">${img(pic && IMG + 'w780' + pic)}<div class="cc-tt"><b>${esc(np.title)}</b><small>${esc(np.subtitle)}</small></div>
+        <div class="cc-ctl"><button data-a="tracks" aria-label="${esc(T('Subtitles and sound'))}">${ic('subs')}</button><button data-a="skip" data-v="-10000" aria-label="${esc(T('Back 10 seconds'))}">${ic10('rew')}</button>
+          <button class="cc-pp" data-a="toggle" id="cc-pp" aria-label="${esc(T('Play/Pause'))}">${ic(np.playing ? 'pause' : 'play')}</button>
+          <button data-a="skip" data-v="10000" aria-label="${esc(T('Forward 10 seconds'))}">${ic10('fwd')}</button><button data-a="stop" aria-label="${esc(T('Stop'))}">${ic('stop')}</button></div></div>
+      <input type="range" class="cc-seek" id="cc-seek" min="0" max="1000" value="0" aria-label="${esc(T('Seek'))}"><div class="cc-times"><span id="cc-a"></span><span id="cc-b"></span></div>
+      <div class="cc-tracks" ${CAST.tracks ? '' : 'hidden'}><div class="cc-tabs">${tabs}</div><div class="cc-list">${list}</div></div></div></div>`;
+  }
+  $('.sheet-bg', root).onclick = closeSheet;
+  $('#cc-x', root).onclick = () => { castDisconnect(); closeSheet(); };
+  root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { CAST.tab = +b.dataset.tab; castOpen(); });
+  root.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const a = b.dataset.a;
+    if (a === 'tracks') { CAST.tracks = !CAST.tracks; return castOpen(); }
+    castSend(a, +(b.dataset.v || 0), b.dataset.k || '');
+    if (a === 'stop') { CAST.np = null; closeSheet(); }
+  });
+  const seek = $('#cc-seek', root);
+  if (seek) {
+    seek.oninput = () => { CAST.dragging = true; castTimes(+seek.value / 1000); };
+    seek.onchange = () => { CAST.dragging = false; castSend('seek', Math.round(+seek.value / 1000 * (CAST.np?.dur || 0))); };
+  }
+  castUpdate();
+}
+function castTimes(f) {
+  const d = CAST.np?.dur || 0, a = $('#cc-a'), b = $('#cc-b');
+  if (a) a.textContent = fmt(f * d); if (b) b.textContent = '−' + fmt(d - f * d);
+}
+function castUpdate() {
+  const np = CAST.np; if (!np || !$('#cast-card')) return;
+  const pp = $('#cc-pp'); if (pp) pp.innerHTML = ic(np.playing ? 'pause' : 'play');
+  const f = np.dur ? np.pos / np.dur : 0, seek = $('#cc-seek');
+  if (seek && !CAST.dragging) { seek.value = Math.round(f * 1000); castTimes(f); }
+}
+function castDisconnect() {
+  if (CAST.kind === 'chromecast') { try { cast.framework.CastContext.getInstance().endCurrentSession(false); } catch { /* not connected */ } }
+  Object.assign(CAST, { kind: null, tv: null, np: null, tracks: false, cc: null });
+}
+
+// ---- Chromecast from the website (Chrome only): Chrome's own device list, Google's player on the TV
+const CAST_SDK = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+function castSdk() {
+  if (window.cast?.framework) return Promise.resolve(true);
+  return new Promise(res => {
+    const t = setTimeout(() => res(false), 9000);
+    window.__onGCastApiAvailable = ok => { clearTimeout(t); res(!!ok && !!window.cast?.framework); };
+    const s = document.createElement('script'); s.src = CAST_SDK; s.onerror = () => { clearTimeout(t); res(false); };
+    document.head.appendChild(s);
+  });
+}
+async function chromecastPlay(want) {
+  if (!want) return;
+  if (!await castSdk()) return toast(T('Chromecast needs Chrome on a computer or an Android phone.'));
+  const ctx = cast.framework.CastContext.getInstance();
+  ctx.setOptions({ receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID, autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED });
+  try { await ctx.requestSession(); } catch { return; }          // the list was closed
+  const session = ctx.getCurrentSession(); if (!session) return;
+  Object.assign(CAST, { kind: 'chromecast', tv: { id: 'chromecast', name: session.getCastDevice()?.friendlyName || 'Chromecast' }, np: null, tracks: false });
+  castOpen();
+  try {
+    const d = await api.details(want.type, want.id), imdb = d.imdb_id || d.external_ids?.imdb_id;
+    const best = imdb ? castPick(rankStreams(await getStreams(want.type, imdb, want.season, want.episode), d.original_language)) : null;
+    if (!best) { closeSheet(); return toast(T('No copy of this title can play on a Chromecast')); }
+    const info = new chrome.cast.media.MediaInfo(best.url, /\.m3u8(\?|$)/i.test(best.url) ? 'application/x-mpegURL' : 'video/mp4');
+    info.metadata = new chrome.cast.media.MovieMediaMetadata();
+    info.metadata.title = titleOf(d); info.metadata.subtitle = want.season != null ? `S${want.season} • E${want.episode}` : yearOf(d);
+    if (d.backdrop_path) info.metadata.images = [new chrome.cast.Image(IMG + 'w1280' + d.backdrop_path)];
+    const req = new chrome.cast.media.LoadRequest(info);
+    const e = libEntry(want.type, want.id); req.currentTime = e && e.season == want.season && e.episode == want.episode && isContinue(e) ? e.pos / 1000 : 0;
+    await session.loadMedia(req);
+    const player = new cast.framework.RemotePlayer(), ctl = new cast.framework.RemotePlayerController(player);
+    CAST.cc = { player, ctl, title: titleOf(d), subtitle: info.metadata.subtitle, backdrop: d.backdrop_path, poster: d.poster_path };
+    const report = () => {
+      const m = session.getMediaSession?.(), tracks = (m?.media?.tracks || []).filter(t => t.type === 'AUDIO');
+      const active = new Set(m?.activeTrackIds || []);
+      CAST.np = { from: 'chromecast', title: CAST.cc.title, subtitle: CAST.cc.subtitle, poster: CAST.cc.poster, backdrop: CAST.cc.backdrop,
+        pos: Math.round((player.currentTime || 0) * 1000), dur: Math.round((player.duration || 0) * 1000), playing: !player.isPaused, busy: false,
+        subs: [], sub: 'off', audios: tracks.map((t, i) => ({ id: 'a' + i, label: linkClean(t.name || t.language || 'Audio ' + (i + 1), 60) })),
+        audio: (() => { const i = tracks.findIndex(t => active.has(t.trackId)); return i < 0 ? '' : 'a' + i; })(), size: 100, bg: false, bold: false };
+      castUpdate();
+    };
+    ctl.addEventListener(cast.framework.RemotePlayerEventType.ANY_CHANGE, report);
+    report(); castOpen(true);
+  } catch { closeSheet(); toast(T('The Chromecast couldn’t play this copy')); }
+}
+function chromecastCtl(a, v) {
+  const c = CAST.cc; if (!c) return;
+  if (a === 'toggle') c.ctl.playOrPause();
+  else if (a === 'seek' || a === 'skip') { c.player.currentTime = Math.max(0, a === 'seek' ? v / 1000 : c.player.currentTime + v / 1000); c.ctl.seek(); }
+  else if (a === 'stop') { c.ctl.stop(); castDisconnect(); }
+  else if (a === 'audio') {
+    const m = cast.framework.CastContext.getInstance().getCurrentSession()?.getMediaSession?.();
+    const t = (m?.media?.tracks || []).filter(x => x.type === 'AUDIO')[+String(arguments[2] || '').slice(1)];
+    if (m && t) m.editTracksInfo(new chrome.cast.media.EditTracksInfoRequest([t.trackId]), () => {}, () => {});
+  }
 }
 
 // ============================================================================ player
