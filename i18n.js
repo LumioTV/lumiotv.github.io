@@ -1043,5 +1043,11 @@ window.LUMIO_AR = {
 "This week": "هذا الأسبوع",
 "Nothing coming up yet": "لا شيء قادم بعد",
 "Check your connection and try again.": "تحقق من اتصالك وحاول مجددًا.",
-"Save a show to your watchlist and its next episode appears here, with the day it comes out.": "احفظ مسلسلًا في قائمتك وستظهر حلقته القادمة هنا مع يوم صدورها."
+"Save a show to your watchlist and its next episode appears here, with the day it comes out.": "احفظ مسلسلًا في قائمتك وستظهر حلقته القادمة هنا مع يوم صدورها.",
+"Show more": "عرض المزيد",
+"Search episodes": "ابحث في الحلقات",
+"min left": "دقيقة متبقية",
+"Share": "مشاركة",
+"Episodes": "الحلقات",
+"No episodes match": "لا توجد حلقات مطابقة"
 };

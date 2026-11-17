@@ -2906,6 +2906,41 @@ async function deleteAccount() {
   loginView();
 }
 
+// ---------------------------------------------------------------------------- error reports (Sentry)
+// Errors on the website also go to Sentry (project lumio-web, EU), where they are grouped and followed up — the same
+// rules as the apps: no account, email, what you watched, links, server names, addresses or keys (sentryScrub). Only
+// this page's own files are named in "where it happened"; anything else (an extension, another site) shows as
+// <other>. The key below only lets a page send reports into that project (Sentry's design: it's meant to be public).
+const SENTRY = { url: 'https://o4512447255937024.ingest.de.sentry.io/api/4512447279792208/envelope/?sentry_key=3640a8bfe1a731402e784ca47afeee43&sentry_version=7' };
+/** The text without anything personal (same rules as the apps' CrashReports.scrub). */
+const sentryScrub = t => String(t || '')
+  .replace(/\b[a-zA-Z][a-zA-Z0-9+.-]{1,12}:\/\/[^\s"'<>)\]}]+/g, m => m.split('://')[0] + '://<link>')
+  .replace(/\/(live|movie|series|timeshift)\/[^/\s]+\/[^/\s]+\//g, '/$1/<hidden>/<hidden>/')
+  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
+  .replace(/\b\d{1,3}(\.\d{1,3}){3}(:\d{1,5})?\b/g, '<ip>')
+  .replace(/\b(authorization\s*[:=]\s*(bearer\s+|basic\s+)?|bearer\s+)[^\s,;"')]{3,}/gi, '<key>')
+  .replace(/\b(username|user|password|pass|pwd|token|apikey|api_key|key|auth|refresh_token|access_token)\s*[=:]\s*[^\s&,;"')]+/gi, '$1=<hidden>')
+  .slice(0, 1000);
+/** A browser's stack → Sentry frames, oldest call first: our files by name and line, anything else as <other>. */
+function sentryFrames(stack, origin) {
+  const out = [];
+  for (const line of String(stack || '').split('\n')) {
+    const m = line.match(/^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/) || line.match(/^\s*(.*?)@(.+?):(\d+):(\d+)\s*$/);
+    if (!m) continue;
+    const own = m[2].startsWith(origin + '/');
+    out.push({ function: own && m[1] ? m[1].slice(0, 120) : '?', filename: own ? m[2].slice(origin.length + 1).split('?')[0].slice(0, 80) : '<other>',
+      lineno: +m[3], colno: +m[4], in_app: own });
+  }
+  return out.slice(0, 50).reverse();
+}
+/** One error → the envelope Sentry takes (header, item header, event; one per line). */
+function sentryEnvelope({ message, stack, name, version, origin, now, id }) {
+  const event = { event_id: id, timestamp: now / 1000, platform: 'javascript', level: 'error', release: 'lumio-web@' + version,
+    environment: 'production', tags: { form: 'web' },
+    exception: { values: [{ type: String(name || 'Error').slice(0, 60), value: sentryScrub(message), stacktrace: { frames: sentryFrames(stack, origin) } }] } };
+  return [JSON.stringify({ event_id: id, sent_at: new Date(now).toISOString() }), JSON.stringify({ type: 'event' }), JSON.stringify(event)].join('\n');
+}
+
 /**
  * Crash reports: errors on the website go to Lumio's crash log (table crash_reports — only you can read it, in the
  * Supabase dashboard): the page version, browser and the error. No account, email or what you watched. Each
@@ -2922,8 +2957,21 @@ async function deleteAccount() {
       headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ platform: 'web', app_version: ver.slice(0, 40), device: navigator.userAgent.slice(0, 120), os: (navigator.userAgentData?.platform || navigator.platform || '').slice(0, 60), message: msg, stack: String(stack || '').slice(0, 16000) }) }).catch(() => { });
   };
-  addEventListener('error', e => send(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`));
-  addEventListener('unhandledrejection', e => send(e.reason?.message || e.reason, e.reason?.stack));
+  // the same errors (same filter, once each, at most 5 a visit) also go to Sentry
+  const toSentry = (msg, stack, name) => {
+    msg = String(msg || '').slice(0, 500);
+    if (!msg || /^Script error\.?$|ResizeObserver loop|AbortError|NetworkError|Failed to fetch|Load failed|NotAllowedError/i.test(msg) || toSentry.seen.has(msg) || toSentry.seen.size >= 5) return;
+    toSentry.seen.add(msg);
+    const version = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([\w]+)/) || [])[1] || 'dev';
+    const id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      fetch(SENTRY.url, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: sentryEnvelope({ message: msg, stack, name, version, origin: location.origin, now: Date.now(), id }) }).catch(() => {});
+    } catch { /* never let a report break the page */ }
+  };
+  toSentry.seen = new Set();
+  addEventListener('error', e => { send(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`); toSentry(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`, e.error?.name); });
+  addEventListener('unhandledrejection', e => { send(e.reason?.message || e.reason, e.reason?.stack); toSentry(e.reason?.message || e.reason, e.reason?.stack, e.reason?.name); });
 })();
 
 // ---- Sign in a TV (page opened by scanning the QR code on Lumio TV)
