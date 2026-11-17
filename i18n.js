@@ -1052,5 +1052,7 @@ window.LUMIO_AR = {
 "No episodes match": "لا توجد حلقات مطابقة",
 "Remove from Coming up": "إزالة من القادمة",
 "Removed from Coming up": "أُزيل من القادمة",
-"Removed from History": "أُزيل من السجل"
+"Removed from History": "أُزيل من السجل",
+"Silent during the call": "صامت أثناء المكالمة",
+"Sound back on": "عاد الصوت"
 };
