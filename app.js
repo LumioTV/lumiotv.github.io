@@ -954,6 +954,19 @@ const LANG_WORDS = { en: ['ENG', 'ENGLISH'], pl: ['PL', 'POL', 'POLISH', 'LEKTOR
   es: ['SPANISH', 'ESP', 'CASTELLANO', 'LATINO', 'LAT', 'SPA'], de: ['GERMAN', 'GER', 'DEUTSCH'], ru: ['RUS', 'RUSSIAN'], uk: ['UKR', 'UKRAINIAN'], pt: ['POR', 'PORTUGUESE', 'DUBLADO', 'PT-BR'],
   hi: ['HINDI', 'HIN'], ta: ['TAMIL', 'TAM'], te: ['TELUGU', 'TEL'], tr: ['TURKISH', 'TUR'], cs: ['CZ', 'CZECH'], hu: ['HUN', 'HUNGARIAN'], ar: ['ARABIC', 'ARA'], ja: ['JAP', 'JAPANESE', 'JPN'], ko: ['KOR', 'KOREAN'], zh: ['CHI', 'CHINESE', 'MANDARIN'] };
 const FLAG_LANG = { '🇬🇧': 'en', '🇺🇸': 'en', '🇵🇱': 'pl', '🇮🇹': 'it', '🇫🇷': 'fr', '🇪🇸': 'es', '🇲🇽': 'es', '🇩🇪': 'de', '🇷🇺': 'ru', '🇺🇦': 'uk', '🇵🇹': 'pt', '🇧🇷': 'pt', '🇮🇳': 'hi', '🇹🇷': 'tr', '🇨🇿': 'cs', '🇭🇺': 'hu', '🇸🇦': 'ar', '🇪🇬': 'ar', '🇯🇵': 'ja', '🇰🇷': 'ko', '🇨🇳': 'zh', '🇹🇼': 'zh' };
+// ---- what this browser can play: Apple's browsers (Safari, and every browser on iPhone/iPad) can't play MKV / AVI
+/** The file type a source says it is: 'mkv', 'mp4', 'hls' or '' (doesn't say). */
+function containerOf(s) {
+  const path = String(s.url || '').split(/[?#]/)[0], all = `${s.file || ''} ${s.label || ''} ${s.details || ''}`;
+  if (/\.m3u8$/i.test(path)) return 'hls';
+  if (/\.(mkv|avi)$/i.test(path) || /\.(mkv|avi)\b/i.test(s.file || '')) return 'mkv';
+  if (/\.(mp4|m4v|mov)$/i.test(path) || /\.(mp4|m4v|mov)\b/i.test(s.file || '')) return 'mp4';
+  if (/\bMKV\b|\.MKV\b/i.test(all)) return 'mkv';
+  if (/\bMP4\b|\.MP4\b/i.test(all)) return 'mp4';
+  return '';
+}
+/** How much this browser wants a source for its file type (Apple: MKV only as a last resort, MP4 / HLS first). */
+const containerScore = (s, apple) => !apple ? 0 : ({ mkv: -3000, mp4: 300, hls: 300 }[containerOf(s)] ?? 0);
 function streamScore(s, orig) {
   const text = (s.label + ' ' + s.details), up = text.toUpperCase(), words = new Set(up.split(/[^A-Z0-9-]+/));
   const langs = new Set(Object.entries(LANG_WORDS).filter(([, ws]) => ws.some(w => words.has(w))).map(([l]) => l));
@@ -967,7 +980,7 @@ function streamScore(s, orig) {
   if (/\b(CAM|HDCAM|TS|TELESYNC|HDTS|TC)\b/.test(up)) sc -= 900;
   if (s.h === 'Dolby Vision') sc += /HDR/.test(up) ? 25 : 0; else if (s.h) sc += 20;
   if (s.imax) sc += squareScreen() ? 40 : 15;                     // more picture; never outranks a sharper resolution
-  if (/\bMKV\b|\.MKV/.test(up) && isIOS()) sc -= 150;            // Safari can't play MKV
+  sc += containerScore(s, isIOS() || SAFARI);                      // Safari / iPhone can't play MKV: a copy they can play first
   // Sound the browser can actually play: no browser decodes DTS or TrueHD, and only Safari (Apple) decodes Dolby
   // Digital / Digital+ / Atmos — elsewhere those play as a silent picture. AAC / Opus / MP3 play everywhere.
   const dts = /\bDTS\b|DTS-HD|DTS:X/.test(up) || s.a === 'DTS:X' || s.a === 'DTS-HD MA', truehd = s.a === 'Dolby TrueHD' || /TRUE-?HD/.test(up);
@@ -1010,7 +1023,7 @@ async function getStreams(type, imdb, season, episode) {
     getJSON(`${addonBase(a)}/stream/${st}/${id}.json`).then(r => (r.streams || []).filter(x => x.url).map(x => {
       const label = (x.name || a.name).replace(/\n/g, ' '), details = [x.title, x.description].filter(Boolean).join('\n');
       const all = label + ' ' + details;
-      return { addon: a.name, label, details, url: x.url, q: quality(all), h: hdr(all), a: audioTag(all), gb: sizeGb(all), imax: imax(all) };
+      return { addon: a.name, label, details, url: x.url, file: String(x.behaviorHints?.filename || ''), q: quality(all), h: hdr(all), a: audioTag(all), gb: sizeGb(all), imax: imax(all) };
     })).catch(() => [])));
   // Best picture first, then the richest sound, then the biggest file (more bitrate at the same resolution)
   const rank = s => ({ '4K': 0, '1080p': 1, '720p': 2 }[s.q] ?? 3) * 100 + ({ 'Dolby Vision': 0, 'HDR10+': 1, HDR: 2 }[s.h] ?? 3) * 10 + (s.a ? AUDIO_RANK.indexOf(s.a) : 7);
@@ -2020,7 +2033,7 @@ async function quickPlay(type, id, season, episode) {
     if (!best) return manual('No stream found — choose one yourself');
     done();
     startPlayer({ url: best.url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path, addon: best.addon,
-      alts: [...new Map(ranked.filter(x => x.url !== best.url).map(x => [x.url, { url: x.url, addon: x.addon }])).values()].slice(0, 3) });
+      alts: [...new Map(ranked.filter(x => x.url !== best.url && !((isIOS() || SAFARI) && containerOf(x) === 'mkv')).map(x => [x.url, { url: x.url, addon: x.addon }])).values()].slice(0, 3) });
   } catch { manual(); }
 }
 /** Click = [tap]; touch-and-hold or right-click = [hold] (used for Play buttons and episodes). */
@@ -2143,6 +2156,7 @@ function linkPlay(tv) {
 }
 /** The title page's "Play on TV" button: pick one of your TVs (signed in to this account, Lumio open) and it plays there. */
 function playOnTv(want) {
+  if (typeof stopPageTrailers === 'function') stopPageTrailers();   // the title page's trailer stops while the Cast window is open
   // already casting this to a Chromecast: its controls come back
   if (CAST.kind === 'chromecast' && CAST.np) return castOpen();
   LINK.want = want; if (SESSION) linkConnect(); linkSheet(true);
@@ -2180,6 +2194,20 @@ function castPick(ranked) {
   const small = ranked.filter(x => x.q !== '4K'), t = x => `${x.label || ''} ${x.details || ''}`;
   const hevc = x => /X265|HEVC|H\.?265/i.test(t(x)), plain = x => /\.(mp4|m4v|m3u8)$/i.test(String(x.url || '').split('?')[0]) || /\bMP4\b/i.test(t(x));
   return small.find(x => !hevc(x) && plain(x)) || small.find(x => !hevc(x)) || small[0] || ranked[0] || null;
+}
+/**
+ * The copies a Chromecast tries, best first (if one won't play, the next): up to 3 — the app's CastPick.candidates.
+ * Picture first (H.264 up to 1080p, then HEVC, then 4K), then sound it can play (AAC before Dolby; DTS / TrueHD last:
+ * a Google TV Streamer plays those silent), then a plain MP4 / HLS file; otherwise the ranking's own order.
+ */
+function castCandidates(ranked) {
+  const t = x => `${x.label || ''} ${x.details || ''}`.toUpperCase();
+  const hevc = x => /X265|HEVC|H\.?265/.test(t(x)), plain = x => /\.(mp4|m4v|m3u8)$/i.test(String(x.url || '').split('?')[0]) || /\bMP4\b/.test(t(x));
+  const tier = x => x.q === '4K' ? 2 : hevc(x) ? 1 : 0;
+  const sound = x => /\bDTS\b|DTS-HD|DTS:X|TRUE-?HD/.test(t(x)) ? 2 : /\bDDP|\bDD\+|\bDD[ .]?[257]\.1|\bDD\b|E-?AC-?3|\bAC-?3\b|ATMOS|DOLBY DIGITAL/.test(t(x)) ? 1 : 0;
+  const seen = new Set();
+  return ranked.filter(x => !seen.has(x.url) && seen.add(x.url)).map((x, i) => [x, i])
+    .sort((a, b) => tier(a[0]) - tier(b[0]) || sound(a[0]) - sound(b[0]) || (plain(a[0]) ? 0 : 1) - (plain(b[0]) ? 0 : 1) || a[1] - b[1]).map(p => p[0]).slice(0, 3);
 }
 /** The now-playing card (Lumio TV or Chromecast) */
 const CAST = { kind: null, tv: null, np: null, tab: 0, tracks: false, dragging: false, cc: null };
@@ -2239,13 +2267,27 @@ function castTimes(f) {
   const d = CAST.np?.dur || 0, a = $('#cc-a'), b = $('#cc-b');
   if (a) a.textContent = fmt(f * d); if (b) b.textContent = '−' + fmt(d - f * d);
 }
+/** While something is casting: a small floating Cast button on every page brings its controls back. */
+function castFab() {
+  let b = document.getElementById('cast-fab');
+  const show = !!(CAST.kind && CAST.np) && !PLAYER.el;
+  if (!show) { b?.remove(); return; }
+  if (b) return;
+  b = document.createElement('button'); b.id = 'cast-fab'; b.className = 'cast-fab';
+  b.setAttribute('aria-label', T('Casting controls')); b.innerHTML = ic('cast');
+  b.onclick = () => castOpen();
+  document.body.appendChild(b);
+}
+setInterval(castFab, 1500);
 function castUpdate() {
+  castFab();
   const np = CAST.np; if (!np || !$('#cast-card')) return;
   const pp = $('#cc-pp'); if (pp) pp.innerHTML = ic(np.playing ? 'pause' : 'play');
   const f = np.dur ? np.pos / np.dur : 0, seek = $('#cc-seek');
   if (seek && !CAST.dragging) { seek.value = Math.round(f * 1000); castTimes(f); }
 }
 function castDisconnect() {
+  setTimeout(castFab, 0);
   if (CAST.kind === 'chromecast') { try { cast.framework.CastContext.getInstance().endCurrentSession(false); } catch { /* not connected */ } }
   Object.assign(CAST, { kind: null, tv: null, np: null, tracks: false, cc: null });
 }
@@ -2272,17 +2314,21 @@ async function chromecastPlay(want) {
   castOpen();
   try {
     const d = await api.details(want.type, want.id), imdb = d.imdb_id || d.external_ids?.imdb_id;
-    const best = imdb ? castPick(rankStreams(await getStreams(want.type, imdb, want.season, want.episode), d.original_language)) : null;
-    if (!best) { closeSheet(); return toast(T('No copy of this title can play on a Chromecast')); }
-    const info = new chrome.cast.media.MediaInfo(best.url, /\.m3u8(\?|$)/i.test(best.url) ? 'application/x-mpegURL' : 'video/mp4');
-    info.metadata = new chrome.cast.media.MovieMediaMetadata();
-    info.metadata.title = titleOf(d); info.metadata.subtitle = want.season != null ? `S${want.season} • E${want.episode}` : yearOf(d);
-    if (d.backdrop_path) info.metadata.images = [new chrome.cast.Image(IMG + 'w1280' + d.backdrop_path)];
-    const req = new chrome.cast.media.LoadRequest(info);
-    const e = libEntry(want.type, want.id); req.currentTime = e && e.season == want.season && e.episode == want.episode && isContinue(e) ? e.pos / 1000 : 0;
-    await session.loadMedia(req);
+    const copies = imdb ? castCandidates(rankStreams(await getStreams(want.type, imdb, want.season, want.episode), d.original_language)) : [];
+    if (!copies.length) { closeSheet(); return toast(T('No copy of this title can play on a Chromecast')); }
+    const e = libEntry(want.type, want.id), at = e && e.season == want.season && e.episode == want.episode && isContinue(e) ? e.pos / 1000 : 0;
+    let played = false;
+    for (const best of copies) {                       // if a copy won't play there, the next best one
+      const info = new chrome.cast.media.MediaInfo(best.url, /\.m3u8(\?|$)/i.test(best.url) ? 'application/x-mpegURL' : 'video/mp4');
+      info.metadata = new chrome.cast.media.MovieMediaMetadata();
+      info.metadata.title = titleOf(d); info.metadata.subtitle = want.season != null ? `S${want.season} • E${want.episode}` : yearOf(d);
+      if (d.backdrop_path) info.metadata.images = [new chrome.cast.Image(IMG + 'w1280' + d.backdrop_path)];
+      const req = new chrome.cast.media.LoadRequest(info); req.currentTime = at;
+      try { await session.loadMedia(req); played = true; break; } catch { /* next copy */ }
+    }
+    if (!played) throw new Error('no copy played');
     const player = new cast.framework.RemotePlayer(), ctl = new cast.framework.RemotePlayerController(player);
-    CAST.cc = { player, ctl, title: titleOf(d), subtitle: info.metadata.subtitle, backdrop: d.backdrop_path, poster: d.poster_path };
+    CAST.cc = { player, ctl, title: titleOf(d), subtitle: want.season != null ? `S${want.season} • E${want.episode}` : yearOf(d), backdrop: d.backdrop_path, poster: d.poster_path };
     const report = () => {
       const m = session.getMediaSession?.(), tracks = (m?.media?.tracks || []).filter(t => t.type === 'AUDIO');
       const active = new Set(m?.activeTrackIds || []);
@@ -2389,15 +2435,27 @@ const stripJump = (t, cur) => { const d = t - cur; return Math.abs(d) < 1000 ? '
 function seekPictures(url) {
   // plain video files only (like the apps): streamed playlists (.m3u8 / .mpd) have no cheap way to jump around
   if (!/^https?:|^blob:/i.test(url || '') || /\.(m3u8|mpd)(\?|$)/i.test(url)) return null;
+  // on the page (invisible): browsers only paint frames for a video that is part of the page and allowed to load
   const pv = document.createElement('video');
-  pv.muted = true; pv.preload = 'metadata'; pv.playsInline = true; pv.src = url;
+  pv.muted = true; pv.preload = 'metadata'; pv.playsInline = true; pv.setAttribute('playsinline', ''); pv.setAttribute('aria-hidden', 'true');
+  pv.style.cssText = 'position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:0;pointer-events:none;z-index:-1';
+  pv.src = url; document.body.appendChild(pv);
   const pics = new Map(); let dead = false, queue = [], running = false;
   pv.addEventListener('error', () => { dead = true; });
+  // after a jump: wait until the new picture is really there (not just "seeked")
+  const painted = () => new Promise(res => {
+    const t = setTimeout(res, 700);
+    const ok = () => { clearTimeout(t); res(); };
+    if (pv.requestVideoFrameCallback) pv.requestVideoFrameCallback(ok);
+    else if (pv.readyState >= 2) ok(); else pv.addEventListener('loadeddata', ok, { once: true });
+  });
   const grab = t => new Promise(res => {
     let to;
-    const done = ok => {
+    const done = async ok => {
       pv.removeEventListener('seeked', on); clearTimeout(to);
       if (!ok) return res(null);
+      await painted();
+      if (pv.readyState < 2) return res(null);
       const c = document.createElement('canvas'); c.width = 320; c.height = 180;
       try { c.getContext('2d').drawImage(pv, 0, 0, 320, 180); } catch { return res(null); }
       pics.set(t, c); if (pics.size > 24) pics.delete(pics.keys().next().value);
@@ -2405,7 +2463,7 @@ function seekPictures(url) {
     };
     const on = () => done(true);
     pv.addEventListener('seeked', on);
-    to = setTimeout(() => { if (!pics.size) dead = true; done(false); }, 6000);   // the first one never came: no previews for this video
+    to = setTimeout(() => { if (!pics.size) dead = true; done(false); }, pics.size ? 6000 : 12000);   // the first one never came: no previews for this video
     try { pv.currentTime = t / 1000; } catch { done(false); }
   });
   async function pump(onPic) {
@@ -2417,7 +2475,7 @@ function seekPictures(url) {
     get: t => pics.get(t), dead: () => dead,
     /** the newest request wins: the spot first, then the pictures either side */
     want(times, onPic) { queue = times.filter(t => t != null && !pics.has(t)); pump(onPic); },
-    close() { dead = true; queue = []; try { pv.removeAttribute('src'); pv.load(); } catch { /* ignore */ } },
+    close() { dead = true; queue = []; try { pv.removeAttribute('src'); pv.load(); pv.remove(); } catch { /* ignore */ } },
   };
 }
 function openPlayer() {
@@ -2496,6 +2554,12 @@ function openPlayer() {
   v.addEventListener('pause', () => loading(false));
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', () => {
+    // this copy won't play here: try the next one by itself before saying so
+    if (r.alts?.length && !v.currentTime) {
+      const [next, ...rest] = r.alts;
+      toast(T('Trying another copy…'));
+      return startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, alts: rest, resumeAt: r.start ? r.start / 1000 : undefined }));
+    }
     const mkv = /\.(mkv|avi)(\?|$)/i.test(r.url);
     const box = document.createElement('div'); box.className = 'p-err';
     box.innerHTML = `<div><h3>Can't play this here</h3><p class="dim">${mkv ? "Safari can't play MKV files. Open it in Infuse or VLC instead (both free on the App Store)." : 'This source failed to load in Safari. Try another source, or open it in another player.'}</p>
