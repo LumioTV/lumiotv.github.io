@@ -414,6 +414,15 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .p-seek { position: relative; height: 26px; display: flex; align-items: center; touch-action: none; margin-top: 8px; cursor: pointer; }
 .p-seek .tr { position: absolute; left: 0; right: 0; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; transition: height .15s; }
 .p-seek:hover .tr { height: 7px; }
+.p-strip { position: absolute; bottom: 30px; left: 0; width: 200px; height: 150px; transform: translateX(-50%); pointer-events: none; z-index: 2; }
+.p-strip canvas { position: absolute; top: 15px; width: 140px; height: 79px; border-radius: 9px; opacity: .55; object-fit: cover; }
+.p-strip > canvas:first-child { left: -84px; }
+.p-strip > canvas:last-child { right: -84px; }
+.p-strip .mid { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: column; align-items: center; z-index: 1; }
+.p-strip .mid canvas { position: static; width: 200px; height: 112px; opacity: 1; border: 1.5px solid rgba(255,255,255,.85); box-shadow: 0 10px 30px rgba(0,0,0,.55); background: #000; }
+.p-strip b { margin-top: 6px; font-size: 16px; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+.p-strip small { font-size: 12px; color: rgba(255,255,255,.75); text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+.p-strip small:empty { display: none; }
 .p-seek .buf { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255,255,255,.3); }
 .p-seek .cur { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
 .p-seek .th { position: absolute; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); transform: scale(.7); transition: transform .15s; }
@@ -985,3 +994,28 @@ img.kb.ok { opacity: 1; }
 /* Anti Spoiler: an unwatched episode's picture */
 .spoiler { display: grid; place-items: center; width: 100%; height: 100%; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, transparent), var(--s2) 55%, rgba(0,0,0,.6)); color: rgba(255,255,255,.55); }
 .spoiler svg { width: 26px; height: 26px; }
+
+/* Download sheet (website) */
+.dl-sheet { padding-top: 0; }
+.dl-top { position: relative; height: 130px; overflow: hidden; border-radius: 22px 22px 0 0; display: flex; align-items: flex-end; justify-content: center; }
+.dl-top img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .7; }
+.dl-top::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent, #121218); }
+.dl-top div { position: relative; z-index: 1; text-align: center; padding-bottom: 10px; }
+.dl-top b { display: block; font-size: 20px; } .dl-top small { color: rgba(255,255,255,.75); }
+.dl-seasons { padding: 8px 14px; } .dl-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 16px; color: var(--dim, #a0a0b0); font-size: 13px; }
+.btn.sm { padding: 6px 14px; min-height: 0; font-size: 13px; }
+.dl-eps { padding: 6px 12px; display: grid; gap: 8px; }
+.dl-ep { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid transparent; color: #fff; text-align: start; }
+.dl-ep.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: color-mix(in srgb, var(--accent) 80%, transparent); }
+.dl-ep .st { position: relative; flex: none; width: 96px; height: 54px; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,.08); }
+.dl-ep .st img { width: 100%; height: 100%; object-fit: cover; } .dl-ep .st i { position: absolute; top: 4px; left: 4px; font-style: normal; font-size: 11px; font-weight: 700; background: rgba(0,0,0,.55); border-radius: 4px; padding: 0 4px; }
+.dl-ep .tx { flex: 1; min-width: 0; } .dl-ep .tx b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dl-ep .tx small { color: var(--dim, #a0a0b0); font-size: 11px; }
+.dl-ep .ck { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.5); display: grid; place-items: center; }
+.dl-ep.on .ck { background: var(--accent); border-color: var(--accent); } .dl-ep .ck svg { width: 16px; height: 16px; }
+.dl-go { position: sticky; bottom: 0; display: grid; gap: 6px; justify-items: center; padding: 10px 14px; background: linear-gradient(transparent, #121218 30%); }
+.dl-go small { color: var(--dim, #a0a0b0); } .dl-go .btn { width: 100%; justify-content: center; } .dl-go .btn[disabled] { opacity: .45; }
+.dl-busy { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 28px; color: rgba(255,255,255,.8); }
+.dl-list { display: grid; gap: 8px; padding: 10px 14px; }
+.dl-file { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); }
+.dl-file > div { flex: 1; min-width: 0; } .dl-file b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dl-file small { color: var(--dim, #a0a0b0); font-size: 12px; }
+.dl-hint { padding: 4px 16px 10px; color: var(--dim, #a0a0b0); font-size: 12px; }
