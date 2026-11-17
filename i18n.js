@@ -1049,5 +1049,8 @@ window.LUMIO_AR = {
 "min left": "دقيقة متبقية",
 "Share": "مشاركة",
 "Episodes": "الحلقات",
-"No episodes match": "لا توجد حلقات مطابقة"
+"No episodes match": "لا توجد حلقات مطابقة",
+"Remove from Coming up": "إزالة من القادمة",
+"Removed from Coming up": "أُزيل من القادمة",
+"Removed from History": "أُزيل من السجل"
 };

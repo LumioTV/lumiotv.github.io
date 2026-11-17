@@ -406,11 +406,11 @@ function toApp(w, base) {
 // ---- library entries: app format ↔ web
 const fromEntry = e => ({ type: e.type, id: e.tmdbId, title: e.title || '', poster: e.posterPath || null, backdrop: e.backdropPath || null, watch: !!e.inWatchlist,
   pos: e.positionMs || 0, dur: e.durationMs || 0, season: e.season ?? null, episode: e.episode ?? null, url: e.lastStreamUrl || null, imdb: e.imdbId || null,
-  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode });
+  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode, noUp: !!e.hideUpcoming });
 const toEntry = x => ({ tmdbId: x.id, type: x.type, title: x.title || '', posterPath: x.poster || null, backdropPath: x.backdrop || null, inWatchlist: !!x.watch,
   positionMs: Math.round(x.pos || 0), durationMs: Math.round(x.dur || 0), season: x.season ?? null, episode: x.episode ?? null,
   lastStreamUrl: x.url && !String(x.url).startsWith('blob:') ? x.url : null, imdbId: x.imdb || null, addonName: x.addon || null,
-  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp });
+  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp, hideUpcoming: !!x.noUp });
 
 const DEFAULT_SETTINGS = fromApp({});
 let S, LIB;
@@ -1041,9 +1041,9 @@ async function introSegments(type, id, season, episode, durMs) {
 /** [first] = the main picture of the screen: fetched straight away at high priority (everything else waits until it's near). */
 function img(src, alt = '', first = false) { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" ${first ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" data-ok>` : ''; }
 const badgesHTML = e => `${e && e.watched ? `<span class="watched" title="${T('Watched')}">${ic('check')}</span>` : ''}${e && e.pin ? `<span class="locked">${ic('lock')}</span>` : ''}`;
-function posterCard(x, i = 0, prog, cont) {
+function posterCard(x, i = 0, prog, cont, from = '') {
   const t = x.media_type || 'movie', e = libEntry(t, x.id);
-  return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${t}/${x.id}" data-k="${t}-${x.id}" data-type="${t}" data-id="${x.id}" ${cont ? 'data-cont="1"' : ''} data-title="${esc(titleOf(x))}" data-poster="${esc(x.poster_path || '')}" data-year="${yearOf(x)}">
+  return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${t}/${x.id}" data-k="${t}-${x.id}" data-type="${t}" data-id="${x.id}" ${cont ? 'data-cont="1"' : ''} ${from ? `data-from="${from}"` : ''} data-title="${esc(titleOf(x))}" data-poster="${esc(x.poster_path || '')}" data-year="${yearOf(x)}">
     <div class="art">${img(x.poster_path && IMG + 'w342' + x.poster_path, titleOf(x))}
       ${x.vote_average ? `<span class="rate"><b>★</b> ${x.vote_average.toFixed(1)}</span>` : ''}
       <span class="badges">${badgesHTML(e)}</span>
@@ -1251,7 +1251,7 @@ function libraryView(tab = 'watchlist', token) {
   if (tab === 'upcoming') return upcomingView(token);
   const list = tab === 'continue' ? LIB.filter(isContinue) : tab === 'history' ? LIB.filter(e => e.pos > 0) : LIB.filter(e => e.watch);
   view.innerHTML = `${libraryHead(tab)}
-    ${list.length ? `<div class="gutter" style="padding-top:12px"><div class="grid">${list.map((e, i) => posterCard({ id: e.id, media_type: e.type, title: e.title, poster_path: e.poster }, i, tab === 'watchlist' ? 0 : progressOf(e), tab === 'continue')).join('')}</div></div>`
+    ${list.length ? `<div class="gutter" style="padding-top:12px"><div class="grid">${list.map((e, i) => posterCard({ id: e.id, media_type: e.type, title: e.title, poster_path: e.poster }, i, tab === 'watchlist' ? 0 : progressOf(e), tab === 'continue', tab === 'history' ? 'history' : '')).join('')}</div></div>`
       : msg('Nothing here yet', tab === 'watchlist' ? 'Tap the bookmark on any title to save it.' : 'Start watching something!')}`;
 }
 
@@ -1260,7 +1260,7 @@ function libraryView(tab = 'watchlist', token) {
 const UP_MAX = 40;
 /** The titles worth asking about, most recently touched first: shows you follow (saved or started), saved films you haven't seen. */
 function upCandidates(lib, max = UP_MAX) {
-  return lib.filter(e => (e.title || '').trim() && (e.type === 'tv' ? (e.watch || e.season != null || (e.eps || []).length > 0) : e.type === 'movie' && e.watch && !e.watched))
+  return lib.filter(e => (e.title || '').trim() && !e.noUp && (e.type === 'tv' ? (e.watch || e.season != null || (e.eps || []).length > 0) : e.type === 'movie' && e.watch && !e.watched))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, max);
 }
 function upDay(s) {
@@ -1302,7 +1302,7 @@ function upCard(x, i, today) {
   const day = new Date(upDay(x.date)), lang = S.lang === 'ar' ? 'ar' : 'en', soon = upDays(x.date, today) <= 6;
   const top = day.toLocaleDateString(lang, soon ? { weekday: 'short', timeZone: 'UTC' } : { month: 'short', timeZone: 'UTC' });
   const line = x.type === 'tv' ? [x.season != null && x.episode != null ? `S${x.season} E${x.episode}` : '', x.name || ''].filter(Boolean).join(' · ') || T('Series') : T('Movie');
-  return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${x.type}/${x.id}" data-k="${x.type}-${x.id}" data-type="${x.type}" data-id="${x.id}" data-title="${esc(x.title)}" data-poster="${esc(x.poster || '')}">
+  return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${x.type}/${x.id}" data-k="${x.type}-${x.id}" data-type="${x.type}" data-id="${x.id}" data-from="upcoming" data-title="${esc(x.title)}" data-poster="${esc(x.poster || '')}">
     <div class="art">${img(x.poster && IMG + 'w342' + x.poster, x.title)}<span class="leaf"><i>${esc(top)}</i><b>${day.getUTCDate()}</b></span></div>
     <div class="t">${esc(x.title)}</div><div class="y">${esc(line)}</div></a>`;
 }
@@ -1778,7 +1778,7 @@ async function detailsView(type, id, token) {
   tapOrHold($('#d-play'), () => quickPlay(type, id, type === 'tv' ? (resume?.season || season) : null, type === 'tv' ? (resume?.episode || 1) : null), () => { location.hash = playHref; });
   if ($('#d-tv')) $('#d-tv').onclick = () => playOnTv({ type, id, title: titleOf(d), season: type === 'tv' ? (resume?.season || season) : null, episode: type === 'tv' ? (resume?.episode || 1) : null });
   $('#wl').onclick = () => {
-    updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, { watch: !(cur && cur.watch) }));
+    updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, cur && cur.watch ? { watch: false } : { watch: true, noUp: false }));
     const on = libEntry(type, id)?.watch; $('#wl').innerHTML = ic(on ? 'bookmark' : 'bookmarkO'); toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
   };
   if (type === 'tv') {
@@ -2667,11 +2667,20 @@ function playEntry(e, fromStart) {
 }
 function openPosterMenu(p) {
   if (document.querySelector('.pop-bg')) return;
-  const type = p.dataset.type, id = +p.dataset.id, title = p.dataset.title, poster = p.dataset.poster, cont = p.dataset.cont === '1';
+  const type = p.dataset.type, id = +p.dataset.id, title = p.dataset.title, poster = p.dataset.poster, cont = p.dataset.cont === '1', from = p.dataset.from || '';
   const e = libEntry(type, id);
   const header = `<div class="pop-head">${poster ? `<img src="${IMG}w154${esc(poster)}" alt="">` : '<span class="ph"></span>'}<div><b>${esc(title)}</b><small class="dim">${esc(p.dataset.year || '')}</small></div></div>`;
   const base = cur => cur || { type, id, title, poster, pos: 0, dur: 0 };
   let opts;
+  // the poster crumbles away; an emptied day of Coming up loses its heading too
+  const leave = () => dissolve(p, () => { const g = p.parentElement; p.remove(); if (g && !g.querySelector('.poster') && from === 'upcoming') { g.parentElement?.previousElementSibling?.remove(); g.parentElement?.remove(); } });
+  if (from === 'upcoming') {
+    opts = [
+      { icon: 'info', t: 'Open', fn: () => { location.hash = `#/details/${type}/${id}`; } },
+      { icon: 'remove', t: 'Remove from Coming up', fn: () => { updateLib(type, id, cur => Object.assign(base(cur), { noUp: true })); leave(); toast('Removed from Coming up'); } },
+    ];
+    return popup(header, opts);
+  }
   if (cont && e) {
     opts = [
       { icon: 'play', t: 'Continue watching', s: e.season != null ? `S${e.season} • E${e.episode}` : '', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), false)) },
@@ -2692,9 +2701,13 @@ function openPosterMenu(p) {
     opts = [
       { icon: 'play', t: 'Play', s: type === 'tv' ? `S${s0} • E${e0}` : '', fn: () => unlockThen(type, id, title, () => quickPlay(type, id, s0, e0)) },
       { icon: 'speed', t: 'Play manually', s: 'Choose the source yourself', fn: () => unlockThen(type, id, title, () => { location.hash = `#/streams/${type}/${id}/${s0 ?? '-'}/${e0 ?? '-'}`; }) },
-      { icon: inLib ? 'bookmark' : 'bookmarkO', t: inLib ? 'Remove from Library' : 'Add to Library', fn: () => { if (!inLib) flyTo(p, '★', '#FFC94D'); updateLib(type, id, cur => Object.assign(base(cur), { watch: !inLib })); toast(inLib ? 'Removed from Library' : 'Added to Library'); } },
+      { icon: inLib ? 'bookmark' : 'bookmarkO', t: inLib ? 'Remove from Library' : 'Add to Library', fn: () => { if (!inLib) flyTo(p, '★', '#FFC94D'); updateLib(type, id, cur => Object.assign(base(cur), inLib ? { watch: false } : { watch: true, noUp: false })); toast(inLib ? 'Removed from Library' : 'Added to Library'); } },
       { icon: 'checkC', t: watched ? 'Mark as unwatched' : 'Mark as watched', fn: () => { updateLib(type, id, cur => Object.assign(base(cur), { watched: !watched })); refreshBadges(type, id); toast(watched ? 'Marked as unwatched' : 'Marked as watched'); } },
     ];
+    // Library → History: out of History (and Continue Watching); My List, ticks and locks stay — same as the apps
+    if (from === 'history' && e) opts.push({ icon: 'remove', t: 'Remove from History', fn: () => unlockThen(type, id, title, () => {
+      updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0, newEp: false })); leave(); toast('Removed from History');
+    }) });
   }
   popup(header, opts);
 }
