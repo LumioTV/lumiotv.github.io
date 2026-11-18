@@ -69,6 +69,7 @@ const GENRES = [
   ['horror', 'Horror', 'with_genres=27', null, '#8B0000', '#1A0000'],
   ['thriller', 'Thriller', 'with_genres=53', 'with_genres=80|9648', '#4A4E69', '#101222'],
   ['anime', 'Anime', 'with_genres=16&with_original_language=ja', 'with_genres=16&with_original_language=ja', '#FF70A6', '#5C0F30'],
+  ['bollywood', 'Bollywood', 'with_origin_country=IN', 'with_origin_country=IN', '#FF9933', '#4A1F00'],   // Indian films and series
   ['animation', 'Animation', 'with_genres=16', 'with_genres=16', '#06D6A0', '#004D3A'],
   ['family', 'Family', 'with_genres=10751', 'with_genres=10751', '#52B788', '#143D28'],
   ['romance', 'Romance', 'with_genres=10749', null, '#FF4D6D', '#5C0A1A'],
