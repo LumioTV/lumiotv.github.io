@@ -272,6 +272,7 @@ const P = {
   up: 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z', down: 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z',
   tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+  soccer: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 3.3 1.35-.95c1.82.56 3.37 1.76 4.38 3.34l-.39 1.34-1.35.46L13 6.7V5.3zm-3.35-.95L11 5.3v1.4L7.01 9.49l-1.35-.46-.39-1.34c1.01-1.57 2.56-2.77 4.38-3.34zM7.08 17.11l-1.14.1C4.73 15.81 4 13.99 4 12c0-.12.01-.23.02-.35l1-.73 1.38.48 1.46 4.34-.78 1.37zm7.42 2.48c-.79.26-1.63.41-2.5.41s-1.71-.15-2.5-.41l-.69-1.49.64-1.1h5.11l.64 1.11-.7 1.48zM14.27 15H9.73l-1.35-4.02L12 8.44l3.63 2.54L14.27 15zm3.79 2.21-1.14-.1-.79-1.37 1.46-4.34 1.39-.47 1 .73c.01.11.02.22.02.34 0 1.99-.73 3.81-1.94 5.21z',
   livetv: 'M21 6h-7.59l3.29-3.29L16 2l-4 4-4-4-.71.71L10.59 6H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2zm0 14H3V8h18v12zM9 10v8l7-4z',
   star: 'M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z',
   plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
@@ -1099,7 +1100,7 @@ function mountDiscover(root) {
 // ============================================================================ router
 const view = $('#view');
 let routeToken = 0;
-const TABS = [['home', 'Home', 'home'], ['livetv', 'Live TV', 'livetv'], ['search', 'Search', 'search'], ['library', 'Library', 'library'], ['settings', 'Profile', 'avatar']];
+const TABS = [['home', 'Home', 'home'], ['livetv', 'Live TV', 'livetv'], ['soccer', 'Soccer', 'soccer'], ['search', 'Search', 'search'], ['library', 'Library', 'library'], ['settings', 'Profile', 'avatar']];
 const scrollMemo = {};
 /**
  * Bottom bar: a lamp on the bar's top edge shines down on the open tab (theme colour) and glides to the next one.
@@ -1148,6 +1149,7 @@ async function route() {
     switch (name) {
       case 'home': await homeView(token); break;
       case 'livetv': await liveTvView(token); break;
+      case 'soccer': soccerView(); break;
       case 'tv': await channelsView(args[0], args[1], token); break;
       case 'search': searchView(); break;
       case 'library': await libraryView(args[0], token); break;
@@ -1558,6 +1560,14 @@ async function mountMatches(box) {
   draw(list);
   // keep live scores fresh while you're on the page
   const timer = setInterval(async () => { if (!box.isConnected) return clearInterval(timer); if (document.hidden) return; draw(await soccerMatches().catch(() => list)); }, list.some(m => m.live) ? 30000 : 120000);
+}
+
+/** Soccer tab (as in the phone app): live scores, fixtures and results; a live or upcoming match opens its channels. */
+function soccerView() {
+  view.innerHTML = `<div class="sports-head"><div class="gutter"><h1>${ic('soccer')} ${T('Soccer')}</h1><p class="dim">${T('Live scores, fixtures and results — tap a match to watch it')}</p></div></div>
+    <div id="soc-matches"></div>
+    ${sectionH('Channels')}<div class="rail gutter">${TV_CATS.filter(c => c.key === 'sports').map((c, i) => tvTile(c, i, `#/tv/free/${c.key}`, T(c.name), c.emoji, 'tv_' + c.key)).join('')}</div>`;
+  mountMatches($('#soc-matches', view));
 }
 
 /** Live TV tab: favourites, recently watched, countries (Kuwait first), categories and your playlists — all animated. */

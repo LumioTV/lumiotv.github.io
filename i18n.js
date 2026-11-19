@@ -1137,5 +1137,7 @@ window.LUMIO_AR = {
 "Couldn't open this subtitle — try another": "تعذّر فتح هذه الترجمة — جرّب ترجمة أخرى",
 "Connect this phone to the same Wi-Fi as the Chromecast": "وصّل هذا الهاتف بشبكة Wi-Fi نفسها المتصل بها Chromecast",
 "Subtitle timing": "توقيت الترجمة",
-"Earlier − / later +": "أبكر − / لاحقًا +"
+"Earlier − / later +": "أبكر − / لاحقًا +",
+"search for this video": "البحث لهذا الفيديو",
+"Nothing in this language for this video yet": "لا شيء بهذه اللغة لهذا الفيديو بعد"
 };
