@@ -996,7 +996,32 @@ function streamScore(s, orig) {
   return sc;
 }
 const SAFARI = /^((?!chrome|chromium|crios|android|fxios|edg|opr).)*safari/i.test(navigator.userAgent);
-const rankStreams = (list, orig) => list.map(s => [s, streamScore(s, orig)]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+
+/**
+ * What plays on this device, learnt as you watch: each copy is described by its traits (file type, picture codec,
+ * HDR kind, sound, source addon). A copy that played well adds a point to each of its traits; one that wouldn't play
+ * (or played silent) takes one off. Later copies get a bonus or penalty from those points, so after one hunt for a
+ * copy that works on this iPhone, the next films and episodes start with that kind of copy. Kept on this device only.
+ */
+function playTraits(s) {
+  const up = `${s.label || ''} ${s.details || ''} ${s.file || ''}`.toUpperCase();
+  const codec = /\bAV1\b/.test(up) ? 'av1' : /HEVC|X265|H\.?265/.test(up) ? 'hevc' : /X264|H\.?264|\bAVC\b/.test(up) ? 'h264' : '';
+  const sound = /\bDTS\b|DTS-HD|DTS:X/.test(up) || ['DTS:X', 'DTS-HD MA'].includes(s.a) ? 'dts' : /TRUE-?HD/.test(up) || s.a === 'Dolby TrueHD' ? 'truehd'
+    : ['Dolby Atmos', 'Dolby Digital+', 'Dolby Digital'].includes(s.a) || /\bDDP?\b|EAC3|\bAC3\b|ATMOS/.test(up) ? 'dolby' : /\bAAC\b/.test(up) ? 'aac' : '';
+  return [`c:${containerOf(s) || '?'}`, codec && `v:${codec}`, `h:${s.h || 'sdr'}`, sound && `a:${sound}`, s.addon && `src:${s.addon}`].filter(Boolean);
+}
+const PLAYS_KEY = 'lumio.plays';
+/** A copy with these [traits] played well (+1) or wouldn't play here (−1). */
+function learnPlay(traits, ok) {
+  if (!traits?.length) return;
+  const m = raw.get(PLAYS_KEY, {});
+  for (const t of traits) m[t] = Math.max(-5, Math.min(5, (m[t] || 0) + (ok ? 1 : -1)));
+  raw.set(PLAYS_KEY, m);
+}
+/** The bonus (or penalty) for a copy from what has played on this device. */
+const playBonus = (s, m = raw.get(PLAYS_KEY, {})) => playTraits(s).reduce((sum, t) => sum + (m[t] || 0), 0) * 120;
+
+const rankStreams = (list, orig) => { const m = raw.get(PLAYS_KEY, {}); return list.map(s => [s, streamScore(s, orig) + playBonus(s, m)]).sort((a, b) => b[1] - a[1]).map(x => x[0]); };
 const AUDIO_RANK = ['Dolby Atmos', 'Dolby TrueHD', 'DTS:X', 'DTS-HD MA', 'Dolby Digital+', 'Dolby Digital'];
 const audioTag = s => { s = s.toUpperCase();
   return /ATMOS/.test(s) ? 'Dolby Atmos' : /TRUE-?HD/.test(s) ? 'Dolby TrueHD' : /DTS[:-]?X/.test(s) ? 'DTS:X' : /DTS-HD|DTS HD|DTS-MA/.test(s) ? 'DTS-HD MA'
@@ -1873,7 +1898,7 @@ async function streamsView(type, id, season, episode, token) {
     $('#sfil').querySelectorAll('.chip').forEach((b, i) => b.onclick = () => { filter = filters[i]; draw(); });
     const shown = streams.filter(s => filter === 'All' || (filter === 'IMAX' ? s.imax : filter === 'Dolby Vision' ? s.h === filter : filter === 'Atmos' ? s.a === 'Dolby Atmos' : s.addon === filter || s.q === filter));
     list.innerHTML = shown.map(card).join('');
-    list.querySelectorAll('.source').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon }); });
+    list.querySelectorAll('.source').forEach(b => b.onclick = () => { const s = streams[+b.dataset.i]; play(s.url, { addon: s.addon, traits: playTraits(s) }); });
   };
   draw();
 }
@@ -2044,7 +2069,8 @@ async function quickPlay(type, id, season, episode) {
     if (!best) return manual('No stream found — choose one yourself');
     done();
     startPlayer({ url: best.url, title: titleOf(d), subtitle: season != null ? `S${season} • E${episode}` : yearOf(d), type, id, imdb, season, episode, poster: d.poster_path, backdrop: d.backdrop_path, addon: best.addon,
-      alts: [...new Map(ranked.filter(x => x.url !== best.url && !((isIOS() || SAFARI) && containerOf(x) === 'mkv')).map(x => [x.url, { url: x.url, addon: x.addon }])).values()].slice(0, 3) });
+      traits: playTraits(best),
+      alts: [...new Map(ranked.filter(x => x.url !== best.url && !((isIOS() || SAFARI) && containerOf(x) === 'mkv')).map(x => [x.url, { url: x.url, addon: x.addon, traits: playTraits(x) }])).values()].slice(0, 3) });
   } catch { manual(); }
 }
 /** Click = [tap]; touch-and-hold or right-click = [hold] (used for Play buttons and episodes). */
@@ -2566,10 +2592,11 @@ function openPlayer() {
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', () => {
     // this copy won't play here: try the next one by itself before saying so
+    if (!v.currentTime) learnPlay(r.traits, false);               // this kind of copy doesn't play here
     if (r.alts?.length && !v.currentTime) {
       const [next, ...rest] = r.alts;
       toast(T('Trying another copy…'));
-      return startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, alts: rest, resumeAt: r.start ? r.start / 1000 : undefined }));
+      return startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, traits: next.traits, alts: rest, resumeAt: r.start ? r.start / 1000 : undefined }));
     }
     const mkv = /\.(mkv|avi)(\?|$)/i.test(r.url);
     const box = document.createElement('div'); box.className = 'p-err';
@@ -2614,6 +2641,21 @@ function openPlayer() {
   }
 
   // ---- subtitles
+  /**
+   * AirPlay from a web page sends the Apple TV the video's address only: it plays the film itself and never gets the
+   * subtitles added here (Safari's limit, no page can change it). So when both meet, say so and offer what works.
+   */
+  const airplaying = () => !!v.webkitCurrentPlaybackTargetIsWireless;
+  function airplaySubsNote() {
+    sheet('Subtitles over AirPlay', [
+      { t: T("AirPlay from Safari can't carry these subtitles"), s: T('The Apple TV gets only the video'), icon: 'info', fn: () => {} },
+      { t: 'Screen Mirroring', s: T('Control Centre → Screen Mirroring: the TV shows Lumio with its subtitles'), icon: 'cast', fn: () => {} },
+      ...(r.local ? [] : [{ t: 'Infuse', s: T('Plays it on the Apple TV and finds subtitles itself'), icon: 'open', fn: () => location.href = `infuse://x-callback-url/play?url=${encodeURIComponent(r.url)}` }]),
+    ]);
+  }
+  v.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => {
+    if (airplaying() && Array.from(v.textTracks).some(t => t.mode === 'showing')) airplaySubsNote();
+  });
   function addTrack(vttText, label, lang, select = true) {
     if (!PLAYER.el || PLAYER.el !== el) return;
     const url = URL.createObjectURL(new Blob([vttText], { type: 'text/vtt' }));
@@ -2621,6 +2663,7 @@ function openPlayer() {
     v.appendChild(tr);
     setTimeout(() => { if (select) selectText(v.textTracks.length - 1); }, 60);
     toast('Added subtitle: ' + label);
+    if (select && airplaying()) airplaySubsNote();
   }
   function selectText(idx) { for (let i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = i === idx ? 'showing' : 'disabled'; }
   async function addFromText(text, name, lang) { const vtt = /\.(ass|ssa)$/i.test(name) || /^\[Script Info\]/m.test(text) ? assToVtt(text) : srtToVtt(text); addTrack(vtt, name, lang); }
@@ -2882,17 +2925,19 @@ function openPlayer() {
   }
   // Silent source (sound format this browser can't decode): after a few seconds of playing, switch to the next best
   // source automatically, from the same moment (only when Play straight away had alternatives)
-  let soundChecked = false;
+  let soundChecked = false, learnt = false;
   v.addEventListener('timeupdate', () => {
-    if (soundChecked || v.currentTime < 4 || !r.alts?.length || v.muted) return;
+    if (soundChecked || v.currentTime < 4 || v.muted) return;
     soundChecked = true;
     const silent = (typeof v.webkitAudioDecodedByteCount === 'number' && v.webkitAudioDecodedByteCount === 0) || v.mozHasAudio === false
       || (v.audioTracks && v.audioTracks.length === 0);
-    if (!silent) return;
+    if (!silent) { if (!learnt) { learnt = true; learnPlay(r.traits, true); } return; }   // picture and sound: this kind plays here
+    learnPlay(r.traits, false);
+    if (!r.alts?.length) return;
     const [next, ...rest] = r.alts;
     toast('This source had no sound in your browser — trying another');
     saveProgress();
-    startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, alts: rest, resumeAt: v.currentTime }));
+    startPlayer(Object.assign({}, r, { url: next.url, addon: next.addon, traits: next.traits, alts: rest, resumeAt: v.currentTime }));
   });
   PLAYER.saveT = setInterval(saveProgress, 10000);
 }

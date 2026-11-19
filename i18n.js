@@ -1139,5 +1139,10 @@ window.LUMIO_AR = {
 "Subtitle timing": "توقيت الترجمة",
 "Earlier − / later +": "أبكر − / لاحقًا +",
 "search for this video": "البحث لهذا الفيديو",
-"Nothing in this language for this video yet": "لا شيء بهذه اللغة لهذا الفيديو بعد"
+"Nothing in this language for this video yet": "لا شيء بهذه اللغة لهذا الفيديو بعد",
+"Subtitles over AirPlay": "الترجمة عبر AirPlay",
+"AirPlay from Safari can't carry these subtitles": "لا يستطيع AirPlay من Safari نقل هذه الترجمة",
+"The Apple TV gets only the video": "يستقبل Apple TV الفيديو فقط",
+"Control Centre → Screen Mirroring: the TV shows Lumio with its subtitles": "مركز التحكم ← نسخ الشاشة: يعرض التلفاز Lumio مع ترجمته",
+"Plays it on the Apple TV and finds subtitles itself": "يشغّله على Apple TV ويجد الترجمة بنفسه"
 };
