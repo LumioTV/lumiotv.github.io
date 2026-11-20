@@ -1958,6 +1958,116 @@ function dissolve(el, then) {
     .onfinish = () => { setTimeout(() => layer.remove(), 700); el.animate([{ width: el.offsetWidth + 'px', marginInlineEnd: '0px' }, { width: '0px', marginInlineEnd: '-12px' }], { duration: 300, easing: 'ease-out', fill: 'forwards' }).onfinish = then; };
 }
 /**
+ * The crumble's shape, the same as the apps': it starts at the card's top-right and sweeps left along a gently wavy
+ * edge; front() says when a spot breaks off (0 → 1), edgeX() where the still-whole part ends at a height.
+ */
+const DUST = {
+  front: (nx, ny, wob) => Math.min(1, Math.max(0, (0.8 * (1 - nx) + 0.2 * ny + Math.sin(ny * 7 + wob) * 0.035 + 0.035) / 1.07)),
+  edgeX: (reach, ny, wob) => Math.min(1, Math.max(0, 1 - (reach * 1.07 - 0.2 * ny - Math.sin(ny * 7 + wob) * 0.035 - 0.035) / 0.8)),
+  fade: t => { const x = Math.min(1, Math.max(0, (t - 0.35) / 0.65)); return 1 - x * x * (3 - 2 * x); },
+  LIFE: 0.5, MS: 1100,
+};
+/**
+ * Turns `card` into fine dust in its own colours, like Nuvio: the right side breaks first, grains blow up and a little
+ * to the side and fade, about one in seven sparkling warm white. The grains are painted pixel by pixel into one canvas
+ * each frame, which stays smooth on iPhones even with thousands of them. Resolves when it has gone (at once when
+ * motion is reduced; a plain fade where the picture's colours can't be read).
+ */
+function crumble(card, src) {
+  return new Promise(done => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { card.style.opacity = '0'; return done(); }
+    const r = card.getBoundingClientRect(), w = r.width, h = r.height;
+    const fade = () => card.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.85)' }], { duration: DUST.MS, easing: 'ease-in', fill: 'forwards' }).onfinish = () => done();
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onerror = fade;
+    img.onload = () => {
+      const cols = Math.max(40, Math.min(96, Math.round(w / 2.4))), rows = Math.round(cols * h / w);
+      let px;
+      try { const c = document.createElement('canvas'); c.width = cols; c.height = rows; const g = c.getContext('2d'); g.drawImage(img, 0, 0, cols, rows); px = g.getImageData(0, 0, cols, rows).data; }
+      catch { return fade(); }   // the picture's colours can't be read here
+      const n = cols * rows, wob = Math.random() * 6.28;
+      const delay = new Float32Array(n), drift = new Float32Array(n), rise = new Float32Array(n), phase = new Float32Array(n), spark = new Uint8Array(n), rgb = new Uint32Array(n);
+      for (let i = 0; i < n; i++) {
+        const nx = (i % cols + .5) / cols, ny = ((i / cols | 0) + .5) / rows;
+        delay[i] = Math.min(1 - DUST.LIFE, Math.max(0, DUST.front(nx, ny, wob) * (1 - DUST.LIFE) + (Math.random() - .5) * .05));
+        drift[i] = Math.random(); rise[i] = .35 + Math.random() * .9; phase[i] = Math.random() * 6.28;
+        let R = px[i * 4], G = px[i * 4 + 1], B = px[i * 4 + 2];
+        if (Math.random() < .14) { spark[i] = 1; R += (255 - R) * .65; G += (236 - G) * .65; B += (200 - B) * .65; }
+        rgb[i] = (B << 16) | (G << 8) | R;   // canvas pixels are R,G,B,A in memory (little-endian)
+      }
+      // the canvas covers the card plus the space the dust blows into (mostly above it)
+      const dpr = Math.min(devicePixelRatio || 1, 2), ox = r.left - w * .35, oy = r.top - h * .95, cw = w * 2.05, ch = h * 2.05;
+      const cv = document.createElement('canvas'); cv.className = 'dust-cv';
+      const W = Math.round(cw * dpr), H = Math.round(ch * dpr); cv.width = W; cv.height = H;
+      Object.assign(cv.style, { left: ox + 'px', top: oy + 'px', width: cw + 'px', height: ch + 'px' });
+      document.body.appendChild(cv);
+      const g = cv.getContext('2d'), frame = g.createImageData(W, H), buf = new Uint32Array(frame.data.buffer);
+      const cellW = w / cols, cellH = h / rows, t0 = performance.now();
+      const step = now => {
+        const p = Math.min(1, (now - t0) / DUST.MS), reach = p / (1 - DUST.LIFE);
+        // what's still whole: the left part the edge hasn't reached yet
+        if (reach < 1.06) {
+          const pts = ['0 0']; for (let k = 0; k <= 24; k++) { const ny = k / 24; pts.push(`${(DUST.edgeX(reach, ny, wob) * 100).toFixed(2)}% ${(ny * 100).toFixed(2)}%`); }
+          pts.push('0 100%'); card.style.clipPath = card.style.webkitClipPath = `polygon(${pts.join(',')})`;
+        } else card.style.visibility = 'hidden';
+        buf.fill(0);
+        for (let i = 0; i < n; i++) {
+          const t = (p - delay[i]) / DUST.LIFE; if (t <= 0 || t >= 1) continue;
+          const e = Math.pow(t, 1.6), nx = (i % cols + .5) / cols, ny = ((i / cols | 0) + .5) / rows;
+          const x = nx * w + (drift[i] * .55 - .12) * w * e + Math.sin(phase[i] + t * 6) * w * .04 * t + (r.left - ox);
+          const y = ny * h - rise[i] * e * h * .75 + Math.cos(phase[i] + t * 5) * h * .012 * t + (r.top - oy);
+          let a = DUST.fade(t), sz;
+          if (spark[i]) { sz = .75; a *= .6 + .4 * Math.sin(phase[i] * 3 + t * 25); } else sz = 1 - .5 * t;
+          if (a <= .01) continue;
+          const half = Math.max(.5, cellW * sz * dpr / 2), halfH = Math.max(.5, cellH * sz * dpr / 2);
+          const x0 = Math.max(0, Math.round(x * dpr - half)), x1 = Math.min(W, Math.round(x * dpr + half));
+          const y0 = Math.max(0, Math.round(y * dpr - halfH)), y1 = Math.min(H, Math.round(y * dpr + halfH));
+          const v = ((Math.min(1, a) * 255 | 0) << 24 | rgb[i]) >>> 0;
+          for (let yy = y0; yy < y1; yy++) { const row = yy * W; for (let xx = x0; xx < x1; xx++) buf[row + xx] = v; }
+        }
+        g.putImageData(frame, 0, 0);
+        if (p < 1) requestAnimationFrame(step); else { cv.remove(); done(); }
+      };
+      requestAnimationFrame(step);
+    };
+    img.src = src;
+  });
+}
+/**
+ * Long-press on Continue Watching, like Nuvio (and Lumio's apps): the page blurs and darkens, the poster lifts into
+ * the middle with its title and options under it. Remove fades the options, the poster crumbles into dust right
+ * there, the title leaves the rows behind the blur, and then the blur fades away.
+ */
+function liftMenu(p, e, opts) {
+  closePop(); document.querySelector('.lift-bg')?.remove();
+  const type = p.dataset.type, title = p.dataset.title, poster = p.dataset.poster, prog = progressOf(e);
+  const sub = e.season != null ? `S${e.season} • E${e.episode}` : (type === 'tv' ? (S.lang === 'ar' ? T('Series|one') : 'Series') : T('Movie'));
+  const bg = document.createElement('div'); bg.className = 'lift-bg';
+  bg.innerHTML = `<div class="lift" role="dialog" aria-label="${esc(title)}">
+    <div class="lift-card">${poster ? `<img src="${IMG}w342${esc(poster)}" alt="">` : ''}${prog > 0 ? `<i class="lift-prog"><b style="width:${(prog * 100).toFixed(1)}%"></b></i>` : ''}</div>
+    <div class="lift-words"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
+    <div class="lift-opts">${opts.map((o, i) => `<button class="lift-opt${o.danger ? ' danger' : ''}" data-i="${i}" style="animation-delay:${60 + i * 35}ms"><span>${esc(T(o.t))}${o.s ? `<small>${esc(T(o.s))}</small>` : ''}</span>${ic(o.icon)}</button>`).join('')}</div></div>`;
+  let busy = false;
+  const close = () => { if (busy) return; document.removeEventListener('keydown', key); bg.classList.add('out'); setTimeout(() => bg.remove(), 320); };
+  const key = ev => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', key);
+  bg.onclick = ev => { if (!ev.target.closest('.lift-opt') && !busy) close(); };
+  bg.querySelectorAll('.lift-opt').forEach(b => b.onclick = () => {
+    if (busy) return;
+    const o = opts[+b.dataset.i];
+    if (!o.crumble) { close(); return o.fn(); }
+    busy = true; haptic('del');
+    bg.classList.add('removing');   // the options and words leave first
+    setTimeout(async () => {
+      const card = $('.lift-card', bg);
+      await crumble(card, poster ? IMG + 'w342' + poster : '');
+      o.fn();                        // the title leaves the rows while the blur still covers them
+      setTimeout(() => { document.removeEventListener('keydown', key); bg.classList.add('out'); setTimeout(() => bg.remove(), 340); }, 260);
+    }, 200);
+  });
+  document.body.appendChild(bg);
+}
+/**
  * Computers (mouse): rest on a poster and it opens into a wide card with the artwork and the trailer (muted),
  * like Netflix; it closes when the mouse leaves. Click it to open the title.
  */
@@ -2591,6 +2701,8 @@ function openPlayer() {
   v.addEventListener('pause', () => loading(false));
   v.addEventListener('ended', onEnded);
   v.addEventListener('error', () => {
+    // the TV couldn't take the subtitles playlist: back to the plain stream (the copy itself is fine)
+    if (ap.key) { ap.key = null; toast("The TV couldn't take the subtitles"); return swapSource(r.url); }
     // this copy won't play here: try the next one by itself before saying so
     if (!v.currentTime) learnPlay(r.traits, false);               // this kind of copy doesn't play here
     if (r.alts?.length && !v.currentTime) {
@@ -2642,30 +2754,64 @@ function openPlayer() {
 
   // ---- subtitles
   /**
-   * AirPlay from a web page sends the Apple TV the video's address only: it plays the film itself and never gets the
-   * subtitles added here (Safari's limit, no page can change it). So when both meet, say so and offer what works.
+   * AirPlay from a web page sends the TV the video's address only, so subtitles added here never reach it on their
+   * own. Streams (HLS) can carry them: Lumio's airplay-subs function wraps the stream in a playlist that adds the
+   * subtitle as a real HLS subtitle track, and that playlist is what the TV gets (Apple TV, or Samsung / LG with
+   * "Subtitles" on in their AirPlay settings). The video still comes from its own server. Plain video files (MP4)
+   * can't carry a track, so for those we say so and offer what works.
    */
   const airplaying = () => !!v.webkitCurrentPlaybackTargetIsWireless;
+  const SUBS = new WeakMap();   // TextTrack → { vtt, label, lang, key }
+  const isStream = /\.m3u8(\?|$)/i.test(r.url);
+  const ap = { key: null, busy: false, at: 0 };
   function airplaySubsNote() {
     sheet('Subtitles over AirPlay', [
-      { t: T("AirPlay from Safari can't carry these subtitles"), s: T('The Apple TV gets only the video'), icon: 'info', fn: () => {} },
+      { t: T("This copy can't carry subtitles to the TV"), s: T('Only stream copies (HLS) can. This one is a video file'), icon: 'info', fn: () => {} },
       { t: 'Screen Mirroring', s: T('Control Centre → Screen Mirroring: the TV shows Lumio with its subtitles'), icon: 'cast', fn: () => {} },
       ...(r.local ? [] : [{ t: 'Infuse', s: T('Plays it on the Apple TV and finds subtitles itself'), icon: 'open', fn: () => location.href = `infuse://x-callback-url/play?url=${encodeURIComponent(r.url)}` }]),
     ]);
   }
+  /** Switches what the TV plays, keeping the place and whether it was playing. */
+  function swapSource(url) {
+    const at = v.currentTime, playing = !v.paused;
+    ap.at = performance.now(); v.src = url;
+    v.addEventListener('loadedmetadata', () => { try { v.currentTime = at; } catch { } if (playing) v.play().catch(() => {}); }, { once: true });
+  }
+  async function airplaySubs() {
+    if (!airplaying() || ap.busy) return;
+    const showing = Array.from(v.textTracks).find(t => t.mode === 'showing' && SUBS.has(t));
+    const info = showing && SUBS.get(showing);
+    if (!info) return;
+    if (!isStream) return airplaySubsNote();
+    if (ap.key === info.key) return;
+    ap.busy = true; toast('Sending subtitles to the TV…');
+    const res = await fetch(SB_URL + '/functions/v1/airplay-subs', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ video: r.url, vtt: info.vtt, lang: info.lang, label: info.label, duration: v.duration || 0 }) }).then(x => x.ok ? x.json() : null).catch(() => null);
+    ap.busy = false;
+    if (PLAYER.el !== el) return;
+    if (!res?.url) return toast("Couldn't send the subtitles to the TV");
+    ap.key = info.key; swapSource(res.url); toast('Subtitles sent to the TV');
+  }
+  /** Back to the plain stream (AirPlay ended, or subtitles turned off): the page draws its own subtitles again. */
+  function airplaySubsOff() { if (ap.key) { ap.key = null; swapSource(r.url); } }
   v.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => {
-    if (airplaying() && Array.from(v.textTracks).some(t => t.mode === 'showing')) airplaySubsNote();
+    if (performance.now() - ap.at < 4000) return;   // our own source switch can flicker the route: ignore that
+    if (airplaying()) airplaySubs(); else airplaySubsOff();
   });
+  let subN = 0;
   function addTrack(vttText, label, lang, select = true) {
     if (!PLAYER.el || PLAYER.el !== el) return;
     const url = URL.createObjectURL(new Blob([vttText], { type: 'text/vtt' }));
     const tr = document.createElement('track'); tr.kind = 'subtitles'; tr.label = label; tr.srclang = lang || 'und'; tr.src = url;
     v.appendChild(tr);
-    setTimeout(() => { if (select) selectText(v.textTracks.length - 1); }, 60);
+    SUBS.set(tr.track, { vtt: vttText, label, lang: lang || 'und', key: ++subN });
+    setTimeout(() => { if (select) selectText(Array.from(v.textTracks).indexOf(tr.track)); }, 60);
     toast('Added subtitle: ' + label);
-    if (select && airplaying()) airplaySubsNote();
   }
-  function selectText(idx) { for (let i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = i === idx ? 'showing' : 'disabled'; }
+  function selectText(idx) {
+    for (let i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = i === idx ? 'showing' : 'disabled';
+    if (airplaying()) { if (idx < 0) airplaySubsOff(); else airplaySubs(); }
+  }
   async function addFromText(text, name, lang) { const vtt = /\.(ass|ssa)$/i.test(name) || /^\[Script Info\]/m.test(text) ? assToVtt(text) : srtToVtt(text); addTrack(vtt, name, lang); }
   function subtitlesSheet() {
     const tt = Array.from(v.textTracks).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
@@ -3084,7 +3230,7 @@ function playEntry(e, fromStart) {
   else quickPlay(e.type, e.id, e.season, e.episode);   // e.g. a new episode: the best stream straight away
 }
 function openPosterMenu(p) {
-  if (document.querySelector('.pop-bg')) return;
+  if (document.querySelector('.pop-bg, .lift-bg')) return;
   const type = p.dataset.type, id = +p.dataset.id, title = p.dataset.title, poster = p.dataset.poster, cont = p.dataset.cont === '1', from = p.dataset.from || '';
   const e = libEntry(type, id);
   const header = `<div class="pop-head">${poster ? `<img src="${IMG}w154${esc(poster)}" alt="">` : '<span class="ph"></span>'}<div><b>${esc(title)}</b><small class="dim">${esc(p.dataset.year || '')}</small></div></div>`;
@@ -3100,19 +3246,23 @@ function openPosterMenu(p) {
     return popup(header, opts);
   }
   if (cont && e) {
+    // kept, cleared and newer — a deleted one came back from other devices' copy
+    const clearCont = () => updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0 }));
+    const conts = () => document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`);
+    const dropPoster = x => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } };
     opts = [
       { icon: 'play', t: 'Continue watching', s: e.season != null ? `S${e.season} • E${e.episode}` : '', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), false)) },
       { icon: 'replay', t: 'Play from beginning', fn: () => unlockThen(type, id, title, () => playEntry(libEntry(type, id), true)) },
       { icon: 'speed', t: 'Play manually', s: 'Choose the source yourself', fn: () => unlockThen(type, id, title, () => { location.hash = `#/streams/${type}/${id}/${e.season ?? (type === 'tv' ? 1 : '-')}/${e.episode ?? (type === 'tv' ? 1 : '-')}`; }) },
-      { icon: 'remove', t: 'Remove from Continue Watching', fn: () => unlockThen(type, id, title, () => {
-        updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0 }));   // kept, cleared and newer — a deleted one came back from other devices' copy
-        document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`).forEach(x => dissolve(x, () => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } }));
-        toast('Removed from Continue Watching');
-      }) },
+      // a locked title asks for its PIN first and then crumbles in the row; otherwise it crumbles in the lifted menu
+      e.pin && !unlocked.has(lockKey(type, id))
+        ? { icon: 'remove', t: 'Remove from Continue Watching', danger: true, fn: () => unlockThen(type, id, title, () => { clearCont(); conts().forEach(x => dissolve(x, () => dropPoster(x))); toast('Removed from Continue Watching'); }) }
+        : { icon: 'remove', t: 'Remove from Continue Watching', danger: true, crumble: true, fn: () => { clearCont(); conts().forEach(dropPoster); toast('Removed from Continue Watching'); } },
       e.pin
         ? { icon: 'unlock', t: 'Unlock this title', fn: async () => { if (await verifyPin(type, id, title)) { updateLib(type, id, cur => { delete cur.pin; return cur; }); unlocked.delete(lockKey(type, id)); refreshBadges(type, id); toast('Title unlocked'); } } }
         : { icon: 'lock', t: 'Lock this title', s: 'Needs your 4-digit PIN to open', fn: async () => { const pin = await pinPad({ title, setNew: true }); if (!pin) return; const h = await pinHash(type, id, pin); updateLib(type, id, cur => Object.assign(base(cur), { pin: h })); refreshBadges(type, id); toast('Title locked'); } },
     ];
+    return liftMenu(p, e, opts);
   } else {
     const inLib = !!(e && e.watch), watched = !!(e && e.watched);
     const s0 = type === 'tv' ? (e?.season || 1) : null, e0 = type === 'tv' ? (e?.episode || 1) : null;

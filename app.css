@@ -1049,3 +1049,37 @@ img.kb.ok { opacity: 1; }
 .cast-fab svg { width: 26px; height: 26px; }
 @keyframes castRing { from { box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } to { box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 14px transparent; } }
 @media (prefers-reduced-motion: reduce) { .cast-fab { animation: none; } }
+
+/* Continue Watching long-press, like Nuvio: the poster lifts over the blurred page; Remove crumbles it to dust */
+.lift-bg { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; overflow-y: auto; padding: calc(24px + var(--safe-t)) 24px calc(24px + var(--safe-b)); background: rgba(0,0,0,.55); -webkit-backdrop-filter: blur(26px) saturate(1.1); backdrop-filter: blur(26px) saturate(1.1); animation: fade .22s ease-out; transition: opacity .32s ease; }
+.lift-bg.out { opacity: 0; }
+.lift { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.lift-card { position: relative; width: min(46vw, 210px); aspect-ratio: 2 / 3; border-radius: 14px; overflow: hidden; background: var(--s2); box-shadow: 0 26px 60px rgba(0,0,0,.55); animation: liftIn .5s cubic-bezier(.25,1.35,.45,1); }
+.lift-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lift-prog { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0,0,0,.5); }
+.lift-prog b { display: block; height: 100%; background: var(--accent); }
+.lift-words { display: grid; justify-items: center; text-align: center; max-width: min(80vw, 260px); }
+.lift-words b { font: 600 17px/1.3 var(--display); }
+.lift-words small { color: var(--dim); font-size: 12.5px; }
+.lift-opts { width: min(calc(100vw - 64px), 320px); padding: 6px 0; border-radius: 18px; background: color-mix(in srgb, var(--s1) 96%, transparent); animation: liftOpts .36s cubic-bezier(.2,.9,.3,1) both; }
+.lift-opt { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 18px; text-align: start; font: 500 15px/1.3 var(--font); animation: liftOpt .2s ease-out both; }
+.lift-opt span { flex: 1; min-width: 0; }
+.lift-opt small { display: block; color: var(--dim); font-size: 12px; font-weight: 400; }
+.lift-opt svg { width: 20px; height: 20px; flex: 0 0 auto; opacity: .85; }
+.lift-opt.danger { color: #FF6B6B; }
+.lift-opt.danger svg { opacity: 1; }
+.lift-opt:active, .lift-opt:focus-visible { background: rgba(255,255,255,.06); outline: none; }
+.lift-bg.removing .lift-words, .lift-bg.removing .lift-opts { animation: liftOut .2s ease forwards; pointer-events: none; }
+.lift-bg.removing .lift-card { box-shadow: none; transition: box-shadow .2s; }
+.dust-cv { position: fixed; z-index: 401; pointer-events: none; }
+@keyframes liftOut { to { opacity: 0; transform: translateY(14px); } }
+@keyframes liftIn { from { transform: scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes liftOpts { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes liftOpt { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (min-width: 900px) and (orientation: landscape) {
+  .lift { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 40px; row-gap: 14px; align-items: center; }
+  .lift-card { grid-row: 1; grid-column: 1; }
+  .lift-words { grid-row: 2; grid-column: 1; }
+  .lift-opts { grid-row: 1 / 3; grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .lift-bg, .lift-card, .lift-opts, .lift-opt { animation: none; opacity: 1; } }

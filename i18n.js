@@ -1119,6 +1119,7 @@ window.LUMIO_AR = {
 "No other copy to try": "لا توجد نسخة أخرى للتجربة",
 "Casting controls": "التحكم في البث",
 "Cast|to TV": "بث",
+"Series|one": "مسلسل",
 "Bollywood": "بوليوود",
 "Show subtitles earlier": "تقديم الترجمة",
 "Show subtitles later": "تأخير الترجمة",
@@ -1143,6 +1144,12 @@ window.LUMIO_AR = {
 "Subtitles over AirPlay": "الترجمة عبر AirPlay",
 "AirPlay from Safari can't carry these subtitles": "لا يستطيع AirPlay من Safari نقل هذه الترجمة",
 "The Apple TV gets only the video": "يستقبل Apple TV الفيديو فقط",
+"This copy can't carry subtitles to the TV": "هذه النسخة لا تستطيع نقل الترجمة إلى التلفاز",
+"Only stream copies (HLS) can. This one is a video file": "نسخ البث (HLS) فقط تستطيع ذلك، وهذه ملف فيديو",
+"Sending subtitles to the TV…": "جارٍ إرسال الترجمة إلى التلفاز…",
+"Subtitles sent to the TV": "تم إرسال الترجمة إلى التلفاز",
+"Couldn't send the subtitles to the TV": "تعذّر إرسال الترجمة إلى التلفاز",
+"The TV couldn't take the subtitles": "لم يتمكن التلفاز من استقبال الترجمة",
 "Control Centre → Screen Mirroring: the TV shows Lumio with its subtitles": "مركز التحكم ← نسخ الشاشة: يعرض التلفاز Lumio مع ترجمته",
 "Plays it on the Apple TV and finds subtitles itself": "يشغّله على Apple TV ويجد الترجمة بنفسه"
 };
