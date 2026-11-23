@@ -411,18 +411,20 @@ function toApp(w, base) {
 // ---- library entries: app format ↔ web
 const fromEntry = e => ({ type: e.type, id: e.tmdbId, title: e.title || '', poster: e.posterPath || null, backdrop: e.backdropPath || null, watch: !!e.inWatchlist,
   pos: e.positionMs || 0, dur: e.durationMs || 0, season: e.season ?? null, episode: e.episode ?? null, url: e.lastStreamUrl || null, imdb: e.imdbId || null,
-  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode, noUp: !!e.hideUpcoming });
+  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode, noUp: !!e.hideUpcoming, gone: !!e.removed });
 const toEntry = x => ({ tmdbId: x.id, type: x.type, title: x.title || '', posterPath: x.poster || null, backdropPath: x.backdrop || null, inWatchlist: !!x.watch,
   positionMs: Math.round(x.pos || 0), durationMs: Math.round(x.dur || 0), season: x.season ?? null, episode: x.episode ?? null,
   lastStreamUrl: x.url && !String(x.url).startsWith('blob:') ? x.url : null, imdbId: x.imdb || null, addonName: x.addon || null,
-  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp, hideUpcoming: !!x.noUp });
+  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp, hideUpcoming: !!x.noUp, removed: !!x.gone });
 
 const DEFAULT_SETTINGS = fromApp({});
-let S, LIB;
+let S, LIB, GONE = [];
 function loadProfileData() {
   S = fromApp(rawSettings(PROFILE_ID));
   if (sharingAddons()) S.addons = fromApp(rawSettings(MAIN)).addons;
-  LIB = jparse(CD[kL(PROFILE_ID)], []).map(fromEntry);
+  // titles removed from the library stay as "removed" (kept apart, never shown) so other devices' old copies can't bring them back
+  const all = jparse(CD[kL(PROFILE_ID)], []).map(fromEntry);
+  LIB = all.filter(e => !e.gone); GONE = all.filter(e => e.gone);
 }
 const saveSettings = () => {
   const base = rawSettings(PROFILE_ID);
@@ -435,7 +437,7 @@ const saveSettings = () => {
   CD[kS(PROFILE_ID)] = JSON.stringify(next);
   dataChanged(); applyTheme(); applyLang();
 };
-const saveLib = () => { CD[kL(PROFILE_ID)] = JSON.stringify(LIB.slice(0, 500).map(toEntry)); dataChanged(); };
+const saveLib = () => { CD[kL(PROFILE_ID)] = JSON.stringify([...LIB, ...GONE].slice(0, 500).map(toEntry)); dataChanged(); };
 // Scene filters (only thing still read through `store`)
 const store = {
   get(k, d) {
@@ -648,6 +650,7 @@ function updateLib(type, id, fn) {
   const i = LIB.findIndex(e => e.type === type && e.id === id);
   const cur = i >= 0 ? LIB[i] : null;
   const next = fn(cur);
+  if (next) { const g = GONE.findIndex(e => e.type === type && e.id === id); if (g >= 0) GONE.splice(g, 1); }   // watched again: back as new
   if (i >= 0) LIB.splice(i, 1);
   if (next) LIB.unshift(Object.assign(next, { updatedAt: Date.now() }));
   saveLib();
@@ -1084,12 +1087,25 @@ async function introSegments(type, id, season, episode, durMs) {
 /** [first] = the main picture of the screen: fetched straight away at high priority (everything else waits until it's near). */
 function img(src, alt = '', first = false) { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" ${first ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" data-ok>` : ''; }
 const badgesHTML = e => `${e && e.watched ? `<span class="watched" title="${T('Watched')}">${ic('check')}</span>` : ''}${e && e.pin ? `<span class="locked">${ic('lock')}</span>` : ''}`;
+/** Continue Watching: which episode (S2 E5) and how much is left ("42m left"), over the progress line. Same as the apps. */
+function contLabel(type, season, episode, pos, dur, ar = S.lang === 'ar') {
+  const ep = type === 'tv' && season != null && episode != null ? `S${season} E${episode}` : null;
+  let left = null;
+  if (dur > 0) {
+    const mins = Math.floor(Math.max(0, dur - Math.min(Math.max(pos, 0), dur)) / 60000), h = Math.floor(mins / 60), m = mins % 60;
+    if (mins < 1) left = ar ? 'متبقٍّ أقل من دقيقة' : '<1m left';
+    else left = ar ? 'متبقٍّ ' + [h ? `${h} س` : '', m ? `${m} د` : ''].filter(Boolean).join(' ')
+      : [h ? `${h}h` : '', m ? `${m}m` : ''].filter(Boolean).join(' ') + ' left';
+  }
+  return [ep, left].filter(Boolean).join(' · ') || null;
+}
 function posterCard(x, i = 0, prog, cont, from = '') {
   const t = x.media_type || 'movie', e = libEntry(t, x.id);
   return `<a class="poster fly" style="animation-delay:${Math.min(i, 12) * 28}ms" href="#/details/${t}/${x.id}" data-k="${t}-${x.id}" data-type="${t}" data-id="${x.id}" ${cont ? 'data-cont="1"' : ''} ${from ? `data-from="${from}"` : ''} data-title="${esc(titleOf(x))}" data-poster="${esc(x.poster_path || '')}" data-year="${yearOf(x)}">
     <div class="art">${img(x.poster_path && IMG + 'w342' + x.poster_path, titleOf(x))}
       ${x.vote_average ? `<span class="rate"><b>★</b> ${x.vote_average.toFixed(1)}</span>` : ''}
       <span class="badges">${badgesHTML(e)}</span>
+      ${prog && cont && e && !e.newEp ? (l => l ? `<span class="cont-label">${esc(l)}</span>` : '')(contLabel(t, e.season, e.episode, e.pos, e.dur)) : ''}
       ${prog ? `<span class="prog"><i style="width:${prog * 100}%"></i></span>` : ''}</div>
     <div class="t">${esc(titleOf(x))}</div>${yearOf(x) ? `<div class="y">${yearOf(x)}</div>` : ''}</a>`;
 }
