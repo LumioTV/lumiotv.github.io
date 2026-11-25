@@ -1305,6 +1305,9 @@ function placeLamp(nav, instant) {
 addEventListener('resize', () => { const n = $('#nav'); if (n) placeLamp(n, true); });
 let lastHash = '';
 async function route() {
+  // lumiotv.github.io/#/privacy and #/terms: the policies over whatever's open (links on Google's sign-in screen)
+  const doc = (location.hash.match(/^#\/(privacy|terms)\/?$/) || [])[1];
+  if (doc) { history.replaceState(null, '', location.pathname + (lastHash && !/privacy|terms/.test(lastHash) ? lastHash : '#/home')); docSheet(doc); return; }
   if (!SESSION) { loginView(); return; }
   if (!PROFILE_CHOSEN) { profilesView(); return; }
   const hash = location.hash || '#/home';
@@ -3500,56 +3503,250 @@ let PROFILE_CHOSEN = false;
 /** Lumio's mark, the same as the apps: the icon (in your icon colour) and the name in the startup animation's serif, side by side. */
 function lumioLogo() { return `<div class="logo-row"><img class="lmark" src="${iconURL((typeof S !== 'undefined' && S && S.iconColor) || 'midnight', 128)}" alt=""><b class="lword">Lumio</b></div>`; }
 
-// ---- login (email + password, same account as the Android app)
-async function loginView() {
-  renderNav(null); view.innerHTML = ''; document.querySelectorAll('.welcome').forEach(x => x.remove());
-  let creating = false;
-  const w = document.createElement('div'); w.className = 'welcome';
-  const draw = () => {
-    w.querySelector('.wbox').innerHTML = `${lumioLogo()}
-      <div class="seg"><button data-m="0" class="${!creating ? 'on' : ''}">${T('Sign in')}</button><button data-m="1" class="${creating ? 'on' : ''}">${T('Create account')}</button></div>
-      <h1>${T(creating ? 'Create your Lumio account' : 'Welcome back')}</h1>
-      <p class="dim">${T('Your profiles, library and history on every device')}</p>
-      <form id="lf" novalidate>
-        <input class="field" id="le" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="${T('Email')}" aria-label="${T('Email')}">
-        <div class="pw"><input class="field" id="lp" type="password" autocomplete="${creating ? 'new-password' : 'current-password'}" placeholder="${T('Password')}" aria-label="${T('Password')}"><button type="button" id="lshow" aria-label="Show password">${ic('eyeOff')}</button></div>
-        <div class="werr" id="lerr"></div>
-        <button class="btn wgo olive" type="submit" id="lgo">${T(creating ? 'Create account' : 'Sign in')}</button>
-      </form>
-      ${creating ? '' : `<button class="linkbtn" id="lforgot">${T('Forgot password?')}</button>`}
-      <div class="wlang"><button data-l="en" class="${S.lang !== 'ar' ? 'on' : ''}">English</button><span>·</span><button data-l="ar" class="${S.lang === 'ar' ? 'on' : ''}">العربية</button></div>`;
-    const err = $('#lerr', w), email = $('#le', w), pw = $('#lp', w);
-    const shake = m => { err.textContent = T(m); err.style.color = '#FF6B6B'; const box = $('.wbox', w); box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); };
-    w.querySelectorAll('.seg button').forEach(b => b.onclick = () => { creating = b.dataset.m === '1'; draw(); });
-    w.querySelectorAll('.wlang button').forEach(b => b.onclick = () => { raw.set('lumio.deviceLang', b.dataset.l); S.lang = b.dataset.l; applyLang(); draw(); });
-    $('#lshow', w).onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; };
-    $('#lforgot', w)?.addEventListener('click', async () => {
-      if (!validEmail(email.value)) return shake('Enter your email above, then tap “Forgot password?”');
-      try { await authCall('recover?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value) }); err.style.color = '#B5D46B'; err.textContent = T('Password reset email sent'); } catch (e) { shake(e.message); }
-    });
-    $('#lf', w).onsubmit = async e => {
-      e.preventDefault();
-      if (!validEmail(email.value)) return shake('Enter a valid email address');
-      if (pw.value.length < 8) return shake('Password must be at least 8 characters');
-      const go = $('#lgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
-      try {
-        const j = creating ? await authCall('signup?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value), password: pw.value })
-                           : await authCall('token?grant_type=password', { email: normEmail(email.value), password: pw.value });
-        if (!j.access_token) { err.style.color = '#B5D46B'; err.textContent = T('Account created. Check your email to confirm it, then sign in.'); go.disabled = false; go.textContent = T('Sign in'); creating = false; return; }
-        saveSession(j);
-        await afterSignIn();
-        w.remove();
-      } catch (ex) { go.disabled = false; go.textContent = T(creating ? 'Create account' : 'Sign in'); shake(ex.message || 'Network error'); }
-    };
-  };
-  w.innerHTML = `<div class="wall" id="wall"></div><div class="wshade"></div><div class="wbox"></div>`;
-  document.body.appendChild(w); draw();
-  try {
-    const list = (await api.trending('all', 'week')).filter(x => x.poster_path).slice(0, 18);
-    const col = k => `<div class="wcol" style="animation-duration:${38 + k * 7}s;animation-direction:${k % 2 ? 'reverse' : 'normal'}">${[...list, ...list].filter((_, i) => i % 4 === k).map(x => `<img src="${IMG}w342${esc(x.poster_path)}" alt="" loading="lazy">`).join('')}</div>`;
-    const wall = $('#wall', w); if (wall) wall.innerHTML = [0, 1, 2, 3].map(col).join('');
-  } catch { /* offline */ }
+// ---- sign in / create account (same account as the apps): artwork, the logo, and the ways in at the bottom
+/* sign-in helpers: begin */
+/** Base64url without padding (PKCE). */
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** A one-time secret for Google / Apple sign-in (PKCE): 64 url-safe characters. */
+function pkceVerifier() { const a = new Uint8Array(48); crypto.getRandomValues(a); return b64url(a.buffer); }
+/** What's sent to Google / Apple instead of the secret: its SHA-256, base64url. */
+async function pkceChallenge(v) { return b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v))); }
+/** The ways in this Lumio server offers, besides email: Apple and Google once they're switched on in Supabase. */
+function providersFrom(settings) { const x = (settings && settings.external) || {}; return ['apple', 'google'].filter(p => x[p] === true); }
+/** Which buttons to show, in order, and which carries the "Last used" badge. */
+function signInButtons(providers, last) {
+  return [...providers, 'email'].map(m => ({ method: m, last: m === last }));
 }
+/* sign-in helpers: end */
+const SIGN_IN_ICONS = {
+  apple: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.37 12.47c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.29-.88-2.31-3.5zM14.2 6.03c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.08 1.96-.49 2.56-1.21z"/></svg>',
+  google: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.09 3.57-5.16 3.57-8.81z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.9l-3.87-3.01c-1.07.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95H1.27v3.11A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.27 14.29a7.2 7.2 0 0 1 0-4.58V6.6h-4a12 12 0 0 0 0 10.8l4-3.11z"/><path fill="#EA4335" d="M12 4.77c1.76 0 3.34.61 4.59 1.8l3.43-3.43A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.27 6.6l4 3.11C6.22 6.88 8.87 4.77 12 4.77z"/></svg>',
+};
+const SIGN_IN_LABEL = { apple: 'Continue with Apple', google: 'Continue with Google', email: 'Continue with email' };
+let PROVIDERS = raw.get('lumio.providers', null);
+async function loadProviders() {
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/settings`, { headers: { apikey: SB_KEY }, cache: 'no-store' });
+    if (r.ok) { PROVIDERS = providersFrom(await r.json()); raw.set('lumio.providers', PROVIDERS); }
+  } catch { /* offline: last known */ }
+  return PROVIDERS || [];
+}
+const lastSignIn = () => raw.get('lumio.lastSignIn', null);
+const rememberSignIn = m => raw.set('lumio.lastSignIn', m);
+/** Google / Apple: off to their page; they send you back here with a one-time code (see oauthReturn). */
+async function startProviderSignIn(provider, extra = {}) {
+  const v = pkceVerifier();
+  sessionStorage.setItem('lumio.oauth', JSON.stringify(Object.assign({ v, provider, hash: location.hash || '#/home' }, extra)));
+  const back = location.origin + location.pathname;
+  location.href = `${SB_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(back)}&code_challenge=${await pkceChallenge(v)}&code_challenge_method=s256`;
+}
+/** Back from Google / Apple: the one-time code in the address (taken out at once) → { code | error, state }. */
+function oauthReturn() {
+  let st = null; try { st = JSON.parse(sessionStorage.getItem('lumio.oauth') || 'null'); } catch { /* none */ }
+  const q = new URLSearchParams(location.search), h = new URLSearchParams((location.hash || '').replace(/^#\/?/, ''));
+  const code = q.get('code'), error = q.get('error_description') || q.get('error') || (st && (h.get('error_description') || h.get('error')));
+  if (!code && !error) return null;
+  sessionStorage.removeItem('lumio.oauth');
+  history.replaceState(null, '', location.pathname + ((st && st.hash) || '#/home'));
+  return { code, error: error ? String(error).replace(/\+/g, ' ') : null, st };
+}
+/** Swap the one-time code for a session. */
+async function finishProviderSignIn(ret) {
+  if (ret.error) throw new Error(ret.error);
+  if (!ret.st || !ret.st.v) throw new Error('That sign-in expired. Try again.');
+  return authCall('token?grant_type=pkce', { auth_code: ret.code, code_verifier: ret.st.v });
+}
+
+/**
+ * The sign-in screen: real artwork across the top, then the logo and the ways in near your thumb, the policy links at
+ * the very bottom. `methods` draws the buttons; `extra` goes above them (the TV code on the TV page).
+ */
+function signInShell() {
+  renderNav(null); view.innerHTML = ''; document.querySelectorAll('.welcome').forEach(x => x.remove());
+  const w = document.createElement('div'); w.className = 'welcome signin';
+  w.innerHTML = `<div class="shero" id="shero"></div><div class="sshade"></div>
+    <div class="sbottom"><div class="sbrand">${lumioLogo()}</div><div class="sbody"></div>
+      <div class="sfoot"><button data-doc="privacy">${T('Privacy policy')}</button><button data-doc="terms">${T('Terms of service')}</button>
+        <button class="slang">${S.lang === 'ar' ? 'English' : 'العربية'}</button></div></div>`;
+  document.body.appendChild(w);
+  w.querySelectorAll('.sfoot [data-doc]').forEach(b => b.onclick = () => docSheet(b.dataset.doc));
+  heroArt($('#shero', w));
+  return w;
+}
+/**
+ * Trending artwork, one at a time, slowly drifting and cross-fading (still for reduced motion): the poster where the
+ * space is tall (a phone held upright: it fits with almost nothing cut off), the wide backdrop elsewhere.
+ */
+async function heroArt(el) {
+  let list = [];
+  try { list = (await api.trending('all', 'week')).filter(x => x.backdrop_path && x.poster_path).slice(0, 6); } catch { return; }
+  if (!list.length || !el.isConnected) return;
+  const tall = el.clientHeight > el.clientWidth;
+  el.classList.toggle('tall', tall);
+  el.innerHTML = list.map((x, i) => `<img src="${IMG}${tall ? 'w780' + esc(x.poster_path) : 'w1280' + esc(x.backdrop_path)}" alt="" class="${i ? '' : 'on'}" ${i ? 'loading="lazy"' : 'fetchpriority="high"'}>`).join('');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || list.length < 2) return;
+  let i = 0;
+  const t = setInterval(() => {
+    if (!el.isConnected) return clearInterval(t);
+    const imgs = el.querySelectorAll('img'); imgs[i].classList.remove('on'); i = (i + 1) % imgs.length; imgs[i].classList.add('on');
+  }, 7000);
+}
+/** The buttons: Apple and Google (when switched on), then email; the one you used last time wears a badge. */
+function methodButtons(providers) {
+  return signInButtons(providers, lastSignIn()).map(b => `<button class="sbtn ${b.method === 'email' ? 'dark' : 'light'}" data-method="${b.method}">
+    ${SIGN_IN_ICONS[b.method] || ''}<span>${T(SIGN_IN_LABEL[b.method])}</span>${b.last ? `<em class="slast">${T('Last used')}</em>` : ''}</button>`).join('');
+}
+/** Email and password: sign in, or make an account with the same two fields (no tabs). `go(mode, email, pw)` does it. */
+function emailForm(w, { onBack, go, forgot = true, prefill = '' }) {
+  const body = $('.sbody', w);
+  body.innerHTML = `<form class="sform" novalidate>
+      <input class="field" id="se" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="${T('Email')}" aria-label="${T('Email')}" value="${esc(prefill)}">
+      <div class="pw"><input class="field" id="sp" type="password" autocomplete="current-password" placeholder="${T('Password')}" aria-label="${T('Password')}"><button type="button" id="sshow" aria-label="Show password">${ic('eyeOff')}</button></div>
+      <div class="werr" id="serr" role="status"></div>
+      <button class="sbtn light" type="submit" data-mode="in">${T('Sign in')}</button>
+      <button class="sbtn dark" type="button" data-mode="up">${T('Create account')}</button>
+      <div class="srow"><button type="button" class="linkbtn" id="sback">${ic('back')}${T('Other ways')}</button>${forgot ? `<button type="button" class="linkbtn" id="sforgot">${T('Forgot password?')}</button>` : ''}</div>
+    </form>`;
+  const err = $('#serr', w), email = $('#se', w), pw = $('#sp', w), form = $('.sform', w);
+  const say = (m, ok) => { err.textContent = T(m); err.style.color = ok ? '#B5D46B' : '#FF6B6B'; if (!ok) { form.classList.remove('shake'); void form.offsetWidth; form.classList.add('shake'); } };
+  (email.value ? pw : email).focus();
+  $('#sshow', w).onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; };
+  $('#sback', w).onclick = onBack;
+  $('#sforgot', w)?.addEventListener('click', async () => {
+    if (!validEmail(email.value)) return say('Enter your email above, then tap “Forgot password?”');
+    try { await authCall('recover?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value) }); say('Password reset email sent', true); } catch (e) { say(e.message); }
+  });
+  const submit = async mode => {
+    if (!validEmail(email.value)) return say('Enter a valid email address');
+    if (pw.value.length < 8) return say('Password must be at least 8 characters');
+    const btn = form.querySelector(`[data-mode="${mode}"]`), label = btn.innerHTML;
+    form.querySelectorAll('.sbtn').forEach(b => b.disabled = true); btn.innerHTML = '<span class="mini-spin"></span>';
+    try { const msg = await go(mode, normEmail(email.value), pw.value); if (msg) say(msg, true); }
+    catch (ex) { say(ex.message || 'Network error'); }
+    if (btn.isConnected) { form.querySelectorAll('.sbtn').forEach(b => b.disabled = false); btn.innerHTML = label; }
+  };
+  form.onsubmit = e => { e.preventDefault(); submit('in'); };
+  form.querySelector('[data-mode="up"]').onclick = () => submit('up');
+}
+/** Sign in or create an account with email + password → the session (or null when the email must be confirmed first). */
+async function emailSession(mode, email, pw) {
+  const j = mode === 'up' ? await authCall('signup?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email, password: pw })
+                          : await authCall('token?grant_type=password', { email, password: pw });
+  return j.access_token ? j : null;
+}
+
+async function loginView() {
+  const w = signInShell();
+  w.querySelector('.slang').onclick = () => { const l = S.lang === 'ar' ? 'en' : 'ar'; raw.set('lumio.deviceLang', l); S.lang = l; applyLang(); loginView(); };
+  const signedIn = async (j, method) => { saveSession(j); rememberSignIn(method); await afterSignIn(); w.remove(); };
+  const methods = providers => {
+    const body = $('.sbody', w); body.innerHTML = `<div class="smethods">${methodButtons(providers)}</div>`;
+    body.querySelectorAll('[data-method]').forEach(b => b.onclick = () => {
+      if (b.dataset.method !== 'email') return startProviderSignIn(b.dataset.method);
+      emailForm(w, {
+        onBack: () => methods(PROVIDERS || []),
+        go: async (mode, email, pw) => {
+          const j = await emailSession(mode, email, pw);
+          if (!j) return 'Account created. Check your email to confirm it, then sign in.';
+          await signedIn(j, 'email');
+        },
+      });
+    });
+  };
+  methods(PROVIDERS || []);
+  loadProviders().then(p => { if (w.isConnected && $('.smethods', w)) methods(p); });
+  return { w, signedIn };
+}
+/** Back from Google / Apple on this website: finish signing in (or the TV page's sign-in). */
+async function oauthSignIn(ret) {
+  if (ret.st && ret.st.tv) return tvLinkView(ret);
+  const { w, signedIn } = await loginView();
+  try { await signedIn(await finishProviderSignIn(ret), ret.st.provider); }
+  catch (e) { const b = $('.sbody', w); if (b) b.insertAdjacentHTML('afterbegin', `<div class="werr" style="color:#FF6B6B">${esc(T(e.message || 'Network error'))}</div>`); }
+}
+
+// ---- Sign in a TV (page opened by scanning the QR code on Lumio TV): the same screen, with the TV's code above the buttons
+function tvLinkView(ret) {
+  const clean = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  const pretty = c => c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
+  let code = clean((ret && ret.st && ret.st.tv) || new URLSearchParams(location.hash.split('?')[1] || '').get('c'));
+  const w = signInShell();
+  w.querySelector('.slang').onclick = () => { const l = S.lang === 'ar' ? 'en' : 'ar'; raw.set('lumio.deviceLang', l); S.lang = l; applyLang(); location.hash = '#/tv?c=' + code; tvLinkView(); };
+  const body = () => $('.sbody', w);
+  const done = () => {
+    body().innerHTML = `<div class="sdone">${ic('check')}<b>${T('Your TV is signed in')}</b><span>${T('You can close this page. Lumio on your TV opens in a moment.')}</span></div>
+      <button class="sbtn dark" id="thome">${T('Open Lumio here')}</button>`;
+    $('#thome', w).onclick = () => { location.hash = '#/home'; location.reload(); };
+  };
+  // A sign-in just for the TV: its session goes to the TV, this page's own sign-in is left alone
+  const link = async j => {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/link_tv`, { method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + j.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_code: code, p_refresh: j.refresh_token }) });
+    if (r.status === 404) throw new Error("QR sign-in isn't set up on the server yet");
+    if (!r.ok) throw new Error('Network error');
+    if ((await r.json()) !== true) throw new Error('That code expired or is wrong. Check the TV and try again.');
+    done();
+  };
+  const methods = (providers, problem) => {
+    body().innerHTML = `<input class="field tvcode" id="tc" maxlength="9" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="${T('TV code')}" aria-label="${T('TV code')}" value="${pretty(code)}">
+      <div class="werr" id="terr" role="status">${problem ? esc(T(problem)) : ''}</div><div class="smethods">${methodButtons(providers)}</div>`;
+    const tc = $('#tc', w), err = $('#terr', w);
+    tc.oninput = () => { code = clean(tc.value); tc.value = pretty(code); };
+    if (code.length !== 8) tc.focus();
+    body().querySelectorAll('[data-method]').forEach(b => b.onclick = () => {
+      code = clean(tc.value);
+      if (code.length !== 8) { err.style.color = '#FF6B6B'; err.textContent = T('Enter the 8-character code from your TV'); return tc.focus(); }
+      if (b.dataset.method !== 'email') return startProviderSignIn(b.dataset.method, { tv: code });
+      emailForm(w, { forgot: false, prefill: (SESSION && SESSION.email) || '', onBack: () => methods(PROVIDERS || []),
+        go: async (mode, email, pw) => {
+          const j = await emailSession(mode, email, pw);
+          if (!j) return 'Account created. Check your email to confirm it, then sign in.';
+          rememberSignIn('email'); await link(j);
+        } });
+    });
+  };
+  if (ret) {
+    body().innerHTML = '<span class="mini-spin big"></span>';
+    finishProviderSignIn(ret).then(j => { rememberSignIn(ret.st.provider); return link(j); })
+      .catch(e => methods(PROVIDERS || [], e.message || 'Network error'));
+  } else methods(PROVIDERS || []);
+  loadProviders().then(p => { if (w.isConnected && $('.smethods', w)) { const v = $('#tc', w)?.value; methods(p); if (v) $('#tc', w).value = v; } });
+}
+
+// ---- Privacy policy and Terms of service (also reachable when signed out, from the sign-in screen)
+const DOCS = {
+  privacy: ['Privacy Policy', [
+    ['In short', 'Lumio has no ads, no analytics and no trackers, and never sells or shares your data. It only keeps what it needs to sync your account between your phone, TV and the website, plus anonymous crash reports to fix problems.'],
+    ['Your account', 'You sign in with Google, Apple or your email and a password, handled by Supabase Auth (a password is stored only as a secure hash; with Google or Apple, Lumio gets your email address from them and never sees your password). Your profiles, settings, library, watch progress, add-on links and Live TV playlists are saved with your account so every device stays in sync. Database rules make sure only you can read or change them.'],
+    ['On this device', 'Images, catalogs and playlists are cached on the device to make Lumio fast. Reminders and episode alerts are scheduled on the device itself. Clearing the app’s storage removes all of this.'],
+    ['Services Lumio talks to', 'TMDB for titles, artwork and details · the stream and subtitle add-ons you install (they receive the title you ask for) · your IPTV provider and the free channel lists · ESPN’s public scoreboard for football scores · TheIntroDB for intro / credit times · Lumio’s own servers for sync, updates and watch parties. Each service has its own privacy policy.'],
+    ['Watch parties', 'Party messages, reactions and playback position go live between the people in the party and are not stored. Only your profile name is shown to others.'],
+    ['Your content, your responsibility', 'Lumio doesn’t host or provide any videos. You choose the add-ons and playlists you use — only use sources you have the right to watch.'],
+    ['Crash reports', 'If Lumio crashes, or the website hits an error, a short report is sent automatically so the problem can be fixed: the app build, the device model, the Android or browser version and the error itself. It never includes your account, email, or anything you watched. Reports are kept for 90 days and only the Lumio owner can read them.'],
+    ['Removing your data', 'Signing out removes your data from this device. To delete your account and everything synced with it, use Delete account on your Profile (phone or website) or in Settings → Account (TV). It’s erased on every device at once and can’t be undone.'],
+  ]],
+  terms: ['Terms of Service', [
+    ['Using Lumio', 'Lumio is an app and website for organising and playing what you watch. By creating an account or using Lumio you agree to these terms. If you don’t agree, please don’t use Lumio.'],
+    ['Your account', 'Keep your sign-in safe and don’t share it outside your household. You’re responsible for what happens on your account. You can delete it at any time from your Profile or Settings → Account.'],
+    ['Content', 'Lumio doesn’t host, sell or provide any videos. Titles, artwork and details come from TMDB. What you play comes from add-ons, playlists and services you choose yourself; only use sources you have the right to watch.'],
+    ['Fair use', 'Don’t misuse Lumio: no attacking or overloading its servers, no getting round its security, and no using it to break the law or anyone’s rights.'],
+    ['Changes and availability', 'Lumio is offered as it is and may change, pause or stop features at any time. Important changes to these terms will be shown in the app.'],
+    ['Liability', 'As far as the law allows, Lumio isn’t liable for losses that come from using it, from content you choose to play, or from services it links to.'],
+    ['Privacy', 'How your data is handled is set out in the Privacy Policy.'],
+  ]],
+};
+function docSheet(which) {
+  const [title, paras] = DOCS[which] || DOCS.privacy;
+  const s = document.createElement('div'); s.className = 'docsheet'; s.setAttribute('role', 'dialog'); s.setAttribute('aria-label', T(title));
+  s.innerHTML = `<div class="docbox"><div class="dochead"><h2>${T(title)}</h2><button class="icon-btn" aria-label="${T('Close')}">${ic('close')}</button></div>
+    ${paras.map(([h, p]) => `<section><h3>${T(h)}</h3><p>${T(p)}</p></section>`).join('')}</div>`;
+  const close = () => s.remove();
+  s.onclick = e => { if (e.target === s) close(); };
+  s.querySelector('.dochead button').onclick = close;
+  document.body.appendChild(s); s.querySelector('.dochead button').focus();
+}
+
 const normEmail = e => String(e || '').trim().toLowerCase();
 const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normEmail(e));
 
@@ -3734,64 +3931,6 @@ function sentryEnvelope({ message, stack, name, version, origin, now, id }) {
   addEventListener('error', e => { send(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`); toSentry(e.message, e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}`, e.error?.name); });
   addEventListener('unhandledrejection', e => { send(e.reason?.message || e.reason, e.reason?.stack); toSentry(e.reason?.message || e.reason, e.reason?.stack, e.reason?.name); });
 })();
-
-// ---- Sign in a TV (page opened by scanning the QR code on Lumio TV)
-function tvLinkView() {
-  renderNav(null); document.querySelectorAll('.welcome').forEach(x => x.remove());
-  const clean = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-  const pretty = c => c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
-  let code = clean(new URLSearchParams(location.hash.split('?')[1] || '').get('c'));
-  let creating = false;
-  const w = document.createElement('div'); w.className = 'welcome';
-  w.innerHTML = '<div class="wshade"></div><div class="wbox"></div>';
-  const done = () => {
-    w.querySelector('.wbox').innerHTML = `${lumioLogo()}<div class="tv-ok">${ic('check')}</div>
-      <h1>${T('Your TV is signed in')}</h1><p class="dim">${T('You can close this page. Lumio on your TV opens in a moment.')}</p>
-      <button class="btn wgo olive" id="thome">${T('Open Lumio here')}</button>`;
-    $('#thome', w).onclick = () => { location.hash = '#/home'; location.reload(); };
-  };
-  const draw = () => {
-    w.querySelector('.wbox').innerHTML = `${lumioLogo()}<div class="tv-ic">📺</div>
-      <h1>${T('Sign in your TV')}</h1>
-      <p class="dim">${T('Enter the code shown on your TV')}</p>
-      <form id="tf" novalidate>
-        <input class="field tvcode" id="tc" maxlength="9" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" aria-label="${T('TV code')}" value="${pretty(code)}">
-        <div class="seg"><button type="button" data-m="0" class="${!creating ? 'on' : ''}">${T('Sign in')}</button><button type="button" data-m="1" class="${creating ? 'on' : ''}">${T('Create account')}</button></div>
-        <input class="field" id="te" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="${T('Email')}" aria-label="${T('Email')}" value="${esc(SESSION?.email || '')}">
-        <div class="pw"><input class="field" id="tp" type="password" autocomplete="${creating ? 'new-password' : 'current-password'}" placeholder="${T('Password')}" aria-label="${T('Password')}"><button type="button" id="tshow" aria-label="Show password">${ic('eyeOff')}</button></div>
-        <div class="werr" id="terr"></div>
-        <button class="btn wgo olive" type="submit" id="tgo">${T('Sign in TV')}</button>
-      </form>`;
-    const err = $('#terr', w), tc = $('#tc', w), email = $('#te', w), pw = $('#tp', w);
-    const shake = m => { err.textContent = T(m); err.style.color = '#FF6B6B'; const box = $('.wbox', w); box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); };
-    tc.oninput = () => { code = clean(tc.value); tc.value = pretty(code); };
-    w.querySelectorAll('.seg button').forEach(b => b.onclick = () => { code = clean(tc.value); creating = b.dataset.m === '1'; draw(); });
-    $('#tshow', w).onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; };
-    (code.length === 8 ? (email.value ? pw : email) : tc).focus();
-    $('#tf', w).onsubmit = async e => {
-      e.preventDefault();
-      code = clean(tc.value);
-      if (code.length !== 8) return shake('Enter the 8-character code from your TV');
-      if (!validEmail(email.value)) return shake('Enter a valid email address');
-      if (pw.value.length < 8) return shake('Password must be at least 8 characters');
-      const go = $('#tgo', w); go.disabled = true; go.innerHTML = '<span class="mini-spin"></span>';
-      try {
-        // A fresh sign-in just for the TV (this page's own session is left alone)
-        const j = creating ? await authCall('signup?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: normEmail(email.value), password: pw.value })
-                           : await authCall('token?grant_type=password', { email: normEmail(email.value), password: pw.value });
-        if (!j.access_token) { err.style.color = '#B5D46B'; err.textContent = T('Account created. Check your email to confirm it, then sign in.'); creating = false; go.disabled = false; go.textContent = T('Sign in TV'); return; }
-        const r = await fetch(`${SB_URL}/rest/v1/rpc/link_tv`, { method: 'POST',
-          headers: { apikey: SB_KEY, Authorization: 'Bearer ' + j.access_token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ p_code: code, p_refresh: j.refresh_token }) });
-        if (r.status === 404) throw new Error("QR sign-in isn't set up on the server yet");
-        if (!r.ok) throw new Error('Network error');
-        if ((await r.json()) !== true) throw new Error('That code expired or is wrong. Check the TV and try again.');
-        done();
-      } catch (ex) { go.disabled = false; go.textContent = T('Sign in TV'); shake(ex.message || 'Network error'); }
-    };
-  };
-  document.body.appendChild(w); draw();
-}
 
 // ---- Who's watching? / Manage Profiles
 function profilesView(managing = false) {
@@ -4411,8 +4550,11 @@ applyTheme(); applyLang();
 playIntro();
 if (location.hash === '#/play') history.replaceState(null, '', '#/home');
 let PENDING_PARTY = (location.hash.match(/^#\/party\/([A-Za-z0-9]{4,8})/) || [])[1] || null;
-const RECOVERY = recoveryLink(), CONFIRMED = confirmLink();
-if (RECOVERY) newPasswordView(RECOVERY);              // opened from a "reset your password" email
+const DOC = (location.hash.match(/^#\/(privacy|terms)\/?$/) || [])[1];   // opened from a Privacy / Terms link
+if (DOC) history.replaceState(null, '', location.pathname + '#/home');
+const OAUTH = oauthReturn(), RECOVERY = OAUTH ? null : recoveryLink(), CONFIRMED = confirmLink();
+if (OAUTH) oauthSignIn(OAUTH);                        // back from Google / Apple
+else if (RECOVERY) newPasswordView(RECOVERY);         // opened from a "reset your password" email
 else if (CONFIRMED) signInFromConfirm(CONFIRMED);     // opened from the "confirm your email" email
 else if (location.hash.startsWith('#/tv')) tvLinkView();   // opened from the QR code on Lumio TV
 else if (!SESSION) loginView();
@@ -4421,6 +4563,7 @@ else {
   // Fetch the latest from the account (changes made on the phone app or another browser)
   refreshFromCloud();
 }
+if (DOC) docSheet(DOC);
 /**
  * Startup animation: the wand writes the L and the light blooms (same video as the apps, portrait or landscape to
  * fit the screen). Once per visit, only when opening the site normally; any key, click or tap skips it.
