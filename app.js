@@ -9,6 +9,7 @@ const BUILT_IN_ADDONS = [
   { url: 'https://v3-cinemeta.strem.io/manifest.json', name: 'Cinemeta', resources: ['catalog', 'meta'], builtIn: true },
   { url: 'https://opensubtitles-v3.strem.io/manifest.json', name: 'OpenSubtitles', resources: ['subtitles'], builtIn: true },
   { url: 'https://subdl.strem.top/c3ViZGxfM1ZZYVFfcUVoa2d1a0hOZlBlSXBDTFVHNWczS0NfRTF1bFBJMzI2M2lOQS9BUi9oaUV4Y2x1ZGUv/manifest.json', name: 'SubDL Subtitles', resources: ['subtitles'], builtIn: true },
+  { url: 'https://popcorn-notes.lsoares.workers.dev/langs=ara&skip=trivia,goofs,characters,recap&soundtrack=on&ads=on/manifest.json', name: '🍿 Subtitles: Extended', resources: ['subtitles'], builtIn: true },   // Popcorn Notes (v5)
 ];
 // Background themes (Settings → Appearance), the same as the apps: [key, name, about, page, card, raised card, glows]
 // where a glow is [colour or 'accent', x, y, size, strength], a soft pool of light fixed behind the page.
@@ -366,7 +367,7 @@ const sharingAddons = () => { const p = activeProfile(); return p.id !== MAIN &&
 const hexToLong = h => 0xFF000000 + parseInt(String(h).replace('#', '').slice(0, 6) || '7C5CFF', 16);
 const longToHex = n => '#' + ((Number(n) >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
 function rawSettings(id) { const v = jparse(CD[kS(id)], null); return v || (id === MAIN ? {} : rawSettings(MAIN)); }
-const BUILT_IN_ADDONS_VERSION = 4;
+const BUILT_IN_ADDONS_VERSION = 5;   // v5: Popcorn Notes subtitles
 /** The old Classic look's olive custom colour (yellow-green) — switched once to Midnight (v4, same as the apps). */
 function isOliveHex(h) { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b);
   if (mx === mn || mx === 0) return false; const s = (mx - mn) / mx; let hue = mx === r ? (g - b) / (mx - mn) : mx === g ? 2 + (b - r) / (mx - mn) : 4 + (r - g) / (mx - mn); hue = (hue * 60 + 360) % 360;
@@ -732,7 +733,8 @@ async function getJSON(url, timeout = 15000) {
   for (let attempt = 0; ; attempt++) {
     const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeout);
     try {
-      const r = await fetch(url, { signal: ctl.signal });
+      // Lumio's own server (TMDB through tmdb-proxy) wants Lumio's public app key
+      const r = await fetch(url, url.startsWith(SB_URL) ? { signal: ctl.signal, headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } } : { signal: ctl.signal });
       if (r.ok) return await r.json();
       if ((r.status !== 429 && r.status < 500) || attempt >= 2) throw new Error('HTTP ' + r.status);
       const after = Number(r.headers.get('Retry-After')) * 1000;
@@ -757,9 +759,54 @@ function arText(en, ar) {
   }
   return en;
 }
-function tmdb(path) {
-  const key = (S.tmdbKey || '').trim() || BUILT_IN_TMDB_KEY;
-  const url = `https://api.themoviedb.org/3/${path}${path.includes('?') ? '&' : '?'}api_key=${key}&language=en-US`;
+/**
+ * Lumio's TMDB key, used when you haven't set your own: from Lumio's server (Supabase → TMDB_KEY, function tmdb-key), so
+ * a new key works without a new website; kept for the next visit. Same as the apps' TmdbKey.
+ */
+const TMDBKEY = { now: (() => { try { const k = localStorage.getItem('lumio.tmdbKey') || ''; return /^[0-9a-f]{32}$/i.test(k) ? k : BUILT_IN_TMDB_KEY; } catch (e) { return BUILT_IN_TMDB_KEY; } })(), asking: null };
+/** Asks the server for the key (at start, or after TMDB refused `failed`); true when there's now a different key. One question at a time. */
+function refreshTmdbKey(failed = TMDBKEY.now) {
+  if (TMDBKEY.now !== failed) return Promise.resolve(true);
+  return TMDBKEY.asking || (TMDBKEY.asking = fetch(`${SB_URL}/functions/v1/tmdb-key`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
+    .then(j => {
+      const k = String((j && j.key) || '').trim();
+      if (!/^[0-9a-f]{32}$/i.test(k) || k === TMDBKEY.now) return false;
+      TMDBKEY.now = k; try { localStorage.setItem('lumio.tmdbKey', k); } catch (e) {}
+      return true;
+    }).finally(() => { TMDBKEY.asking = null; }));
+}
+/** A TMDB request made with `make(key)`; when TMDB refuses Lumio's key (it was changed), the new key is fetched and it's tried once more. */
+/** Asking TMDB directly failed in a way Lumio's server can get round: refused key, busy/broken TMDB, or out of reach. Same as the apps. */
+function throughLumio(e) {
+  const m = /^HTTP (\d+)$/.exec((e && e.message) || ''); if (!m) return true;
+  const code = +m[1]; return code === 401 || code === 403 || code === 429 || code >= 500;
+}
+let tmdbDirectOffUntil = 0;
+/**
+ * A TMDB request made with `make(key)`. When TMDB refuses Lumio's key, the newest key is fetched and it's tried again;
+ * when that still fails (TMDB refusing or failing us from this network, or out of reach), `make(null)` goes through
+ * Lumio's server, and for 10 minutes after that, straight there. Your own key (Settings) is always used as it is.
+ */
+async function withTmdbKey(make) {
+  const own = (S.tmdbKey || '').trim(), key = own || TMDBKEY.now;
+  if (!own && Date.now() < tmdbDirectOffUntil) return make(null);
+  try { return await make(key); }
+  catch (e) {
+    if (own || !throughLumio(e)) throw e;
+    if (e.message === 'HTTP 401' && await refreshTmdbKey(key)) {
+      try { return await make(TMDBKEY.now); } catch (e2) { if (!throughLumio(e2)) throw e2; }
+    }
+    tmdbDirectOffUntil = Date.now() + 10 * 60e3;
+    return make(null);
+  }
+}
+const tmdb = path => withTmdbKey(key => tmdbWith(key, path));
+refreshTmdbKey();   // Lumio's current key, so a changed key never stops the catalog
+/** TMDB address for `path` with `key`; key null → through Lumio's server (tmdb-proxy adds Lumio's key). */
+const tmdbUrl = (key, path) => key ? `https://api.themoviedb.org/3/${path}${path.includes('?') ? '&' : '?'}api_key=${key}`
+  : `${SB_URL}/functions/v1/tmdb-proxy/3/${path}${path.includes('?') ? '&' : '?'}via=lumio`;
+function tmdbWith(key, path) {
+  const url = `${tmdbUrl(key, path)}&language=en-US`;
   const ar = S.lang === 'ar' && !NO_TEXT.test(path), ck = ar ? url + '#ar' : url;
   if (!cache.has(ck)) cache.set(ck, (ar
     ? Promise.all([getJSON(url), getJSON(url.replace('language=en-US', 'language=ar')).catch(() => null)]).then(([e, a]) => a ? arText(e, a) : e)
@@ -1117,25 +1164,109 @@ const logoHTML = (s, i, size) => s.logo ? `<span class="logo m-${s.motion}" styl
 const tileStyle = (c1, c2, i) => `--c1:${c1};--c2:${c2};--ang:${120 + (i * 37) % 120}deg;animation-delay:${i * 45}ms,0s`;
 
 function discoverSections() {
-  return `${sectionH('Discover', 'Curated lists, updated daily')}
-  <div class="rail gutter">${DISCOVER.map((d, i) => `<a class="tile discover ph" href="#/catalog/discover/${d.key}" style="${tileStyle(d.c1, d.c2, i)}">${photoBits('discover', d.key, DISCOVER_FX[d.key], i)}<span class="emoji" style="animation-delay:${i * .3}s">${d.emoji}</span><span class="lbl"><b>${esc(T(d.name))}</b><small>${esc(T(d.sub))}</small></span></a>`).join('')}</div>
-  ${sectionH('Streaming Services', 'Browse every catalog')}
+  return `${sectionH('Streaming Services', 'Browse every catalog')}
   <div class="rail gutter" id="services-rail">${servicesHTML(SERVICES.filter(s => s.logo))}</div>
-  ${sectionH('Genres', 'Something for every mood')}
-  <div class="rail gutter">${GENRES.map((g, i) => `<a class="tile genre ph" href="#/catalog/genre/${g.key}" style="${tileStyle(g.c1, g.c2, i)}">${photoBits('genres', g.key, GENRE_FX[g.key] || 'sheen', i)}<span class="lbl"><b>${esc(T(g.name))}</b></span></a>`).join('')}</div>
+  ${sectionH('Discover', 'Curated lists, updated daily')}
+  <div class="rail gutter">${DISCOVER.map((d, i) => `<a class="tile discover ph" href="#/catalog/discover/${d.key}" style="${tileStyle(d.c1, d.c2, i)}">${photoBits('discover', d.key, DISCOVER_FX[d.key], i)}<span class="emoji" style="animation-delay:${i * .3}s">${d.emoji}</span><span class="lbl"><b>${esc(T(d.name))}</b><small>${esc(T(d.sub))}</small></span></a>`).join('')}</div>
   ${sectionH('Franchises', 'Every saga, film by film')}
   <div class="rail gutter">${FRANCHISES.map(franchiseTile).join('')}</div>
+  ${sectionH('Genres', 'Something for every mood')}
+  <div class="rail gutter">${GENRES.map((g, i) => `<a class="tile genre ph" href="#/catalog/genre/${g.key}" style="${tileStyle(g.c1, g.c2, i)}">${photoBits('genres', g.key, GENRE_FX[g.key] || 'sheen', i)}<span class="lbl"><b>${esc(T(g.name))}</b></span></a>`).join('')}</div>
   ${sectionH('Production Studios', 'The studios behind the movies')}
   <div class="rail gutter">${STUDIOS.map(studioTile).join('')}</div>
   ${sectionH('Decades', 'Movies from every era')}
   <div class="rail gutter">${DECADES.map(decadeTile).join('')}</div>`;
 }
-const servicesHTML = list => list.map((s, i) => `<a class="tile service" href="#/catalog/service/${s.key}" style="${tileStyle(s.c1, s.c2, i)}">${logoHTML(s, i)}<b>${esc(s.name)}</b></a>`).join('');
+/** TMDB discover filter for what's streaming on a service (its region's catalog for regional services abroad). Same as the apps. */
+const serviceQuery = s => `with_watch_providers=${s.ids}&with_watch_monetization_types=flatrate${s.region ? '&watch_region=' + s.region : ''}`;
+/** A service's most popular series and films, taking turns; only ones with a picture, each once, at most `max`. Same as the apps. */
+function showcaseMix(tv, films, max = 6) {
+  const a = tv.filter(x => x.backdrop_path), b = films.filter(x => x.backdrop_path), out = [], seen = new Set();
+  for (let i = 0; i < Math.max(a.length, b.length); i++) for (const x of [a[i], b[i]]) if (x && out.length < max && !seen.has(x.id)) { seen.add(x.id); out.push(x); }
+  return out;
+}
+/** service_top10 rows → per kind, Netflix's own list for your country when there is one, else trending. Same as the apps' ServiceTop10. */
+function top10Parse(rows) {
+  const out = {};
+  for (const kind of ['movie', 'tv']) {
+    const mine = (Array.isArray(rows) ? rows : []).filter(r => r && r.kind === kind && r.top10_items && r.top10_items.item);
+    if (!mine.length) continue;
+    const source = mine.some(r => r.source === 'netflix') ? 'netflix' : mine[0].source;
+    const pick = mine.filter(r => r.source === source).sort((a, b) => a.rank - b.rank), seen = new Set(), items = [];
+    for (const r of pick) { const x = { ...r.top10_items.item, media_type: kind }; if (!seen.has(x.id)) { seen.add(x.id); items.push(x); } }
+    out[kind] = { source, week: (pick.find(r => r.week) || {}).week || null, items };
+  }
+  return out;
+}
+/** Row title before the service's name: Netflix's own list is a Top 10; the others are what's trending there. */
+const top10Label = (kind, source) => source === 'netflix' ? (kind === 'movie' ? 'Top 10 movies on' : 'Top 10 series on') : (kind === 'movie' ? 'Trending movies on' : 'Trending series on');
+/** TMDB discover filter: released in the last year (when a region has no list yet). */
+const recentFilter = (kind, today = new Date()) => { const d = new Date(today); d.setFullYear(d.getFullYear() - 1); return (kind === 'movie' ? 'primary_release_date' : 'first_air_date') + '.gte=' + d.toISOString().slice(0, 10); };
+const TOP10 = {};   // service + region → its lists, for 3 hours
+/** A service's Top 10 movies and series for your region (kept fresh by the service-top10 job), else its most popular titles of the last year. */
+function serviceTop10(s) {
+  const region = (s.region || S.region || 'US').toUpperCase(), k = s.key + '|' + region + '|' + s.ids, hit = TOP10[k];
+  if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.p;
+  const p = fetch(`${SB_URL}/rest/v1/service_top10?select=kind,source,rank,week,top10_items(item)&service=eq.${encodeURIComponent(s.key)}&region=eq.${encodeURIComponent(region)}&order=kind.asc,source.asc,rank.asc`,
+    { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, cache: 'no-store' })
+    .then(r => r.ok ? r.json() : []).catch(() => []).then(top10Parse)
+    .then(got => Promise.all(['movie', 'tv'].map(kind => got[kind] && got[kind].items.length >= 3 ? got[kind]
+      : api.discover(kind, serviceQuery(s) + '&' + recentFilter(kind), 'popularity.desc', 1).catch(() => [])
+          .then(l => ({ source: 'recent', week: null, items: l.filter(x => x.poster_path).slice(0, 10) }))))
+    .then(([movie, tv]) => ({ movie, tv })));
+  TOP10[k] = { at: Date.now(), p };
+  p.then(v => { if (!v.movie.items.length && !v.tv.items.length) delete TOP10[k]; });
+  return p;
+}
+const SHOWCASE = {};   // service key + query → its picks, for this visit
+/**
+ * Streaming Services, showcase style (like the apps): each service's own top titles slowly cross-fades behind its
+ * brand colour, with "Now: <title>" and a thin line counting down to the next. Pictures load when a card comes into
+ * view; only cards on screen move, and nothing moves when motion is reduced.
+ */
+const servicesHTML = list => list.map((s, i) => `<a class="tile service show" href="#/catalog/service/${s.key}" data-svc="${s.key}" style="${tileStyle(s.c1, s.c2, i)}">
+  <span class="show-pics"></span><span class="show-wash"></span>
+  <span class="show-lbl">${s.logo ? `<img class="show-logo" src="${IMG}w154${s.logo}" alt="">` : '<i class="show-logo"></i>'}<span><b>${esc(s.name)}</b><small>${esc(T('Streaming now'))}</small></span></span>
+  <span class="show-line"><i></i></span></a>`).join('');
+function mountShowcases(root, list) {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  root.querySelectorAll('.tile.show').forEach((card, i) => {
+    const s = list.find(x => x.key === card.dataset.svc); if (!s || card._show) return;
+    const st = card._show = { at: 0, picks: null, timer: 0, seen: false, first: true };
+    const pics = $('.show-pics', card), now = $('.show-lbl small', card), line = $('.show-line', card);
+    const show = (k, first) => {
+      const p = st.picks[k], img = new Image();
+      img.alt = ''; img.className = first ? 'on' : ''; img.src = `${IMG}w780${p.backdrop_path}`;
+      img.onload = () => { requestAnimationFrame(() => img.classList.add('on')); setTimeout(() => { [...pics.children].slice(0, -1).forEach(o => o.remove()); }, 1000); };
+      pics.appendChild(img);
+      now.textContent = `${T('Now')}: ${titleOf(p)}`; now.classList.remove('tick'); void now.offsetWidth; now.classList.add('tick');
+    };
+    const run = () => {
+      clearTimeout(st.timer);
+      if (still || !st.seen || document.hidden || !st.picks || st.picks.length < 2) { card.classList.remove('cycling'); return; }
+      card.classList.add('cycling'); line.classList.remove('go'); void line.offsetWidth; line.classList.add('go');
+      st.timer = setTimeout(() => { st.at = (st.at + 1) % st.picks.length; show(st.at); run(); }, 4200 + (st.first ? 900 * (i % 5) : 0));   // the cards don't all change at once
+      st.first = false;
+    };
+    card.addEventListener('showcase', run);
+    const load = () => {
+      const key = s.key + '|' + serviceQuery(s);
+      const got = SHOWCASE[key] || (SHOWCASE[key] = serviceTop10(s).then(t => showcaseMix(t.tv.items, t.movie.items)));   // its own top titles
+      got.then(p => { if (!p.length) return; st.picks = p; show(0, true); run(); });
+    };
+    const io = new IntersectionObserver(es => es.forEach(e => {
+      st.seen = e.isIntersecting;
+      if (st.seen && !st.picks) load(); else run();
+    }), { rootMargin: '0px 200px' });
+    io.observe(card);
+  });
+  if (!mountShowcases.vis) { mountShowcases.vis = true; document.addEventListener('visibilitychange', () => document.querySelectorAll('.tile.show').forEach(c => c._show && c.dispatchEvent(new Event('showcase')))); }
+}
 function mountDiscover(root) {
   root.querySelectorAll('canvas[data-scene]').forEach(c => window.GenreScenes && GenreScenes.attach(c, c.dataset.scene, +c.dataset.i));
   root.querySelectorAll('[data-art]').forEach(el => artObserver ? artObserver.observe(el) : fillArt(el));
   fillRowArt(root);
-  loadServices().then(list => { const r = $('#services-rail', root); if (r) r.innerHTML = servicesHTML(list); });
+  loadServices().then(list => { const r = $('#services-rail', root); if (r) { r.innerHTML = servicesHTML(list); mountShowcases(r, list); } });
 }
 
 // ============================================================================ router
@@ -1353,7 +1484,7 @@ async function upNext(type, id) {
   const k = type + '-' + id, hit = UP_CACHE.get(k);
   if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.next;
   // one plain request: only dates and numbers are read, so no Arabic text is fetched alongside
-  const d = await getJSON(`https://api.themoviedb.org/3/${type}/${id}?api_key=${(S.tmdbKey || '').trim() || BUILT_IN_TMDB_KEY}&language=en-US`);
+  const d = await withTmdbKey(key => getJSON(`${tmdbUrl(key, `${type}/${id}`)}&language=en-US`));
   const n = d.next_episode_to_air, next = type === 'tv' ? (n ? { date: n.air_date, season: n.season_number, episode: n.episode_number, name: n.name } : null) : (d.release_date ? { date: d.release_date } : null);
   UP_CACHE.set(k, { at: Date.now(), next });
   return next;
@@ -1644,7 +1775,7 @@ async function channelsView(kind, key, token) {
   const src = kind === 'src' ? (S.iptv || []).find(p => p.id === key) : null;
   if (!cat && !src) { location.replace('#/livetv'); return; }
   const c1 = cat?.c1 || '#2563EB', c2 = cat?.c2 || '#0B1E45', title = cat ? T(cat.name) : src.name, emoji = cat?.emoji || (src.kind === 'xtream' ? '🔐' : '📃');
-  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
+  const head = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="banner" style="--c1:${c1};--c2:${c2}"><canvas id="bn-scene"></canvas><div class="ttl"><span style="font-size:42px">${emoji}</span><div><h1>${esc(title)}</h1><p id="ch-count">${T('Loading channels…')}</p></div></div></div>
     <div id="ch-tools"></div><div class="gutter"><div class="grid ch-grid" id="ch-grid">${'<div class="sk" style="aspect-ratio:16/10;border-radius:16px"></div>'.repeat(8)}</div></div>`;
   GenreScenes.attach($('#bn-scene'), cat ? 'tv_' + cat.key : 'tv_playlist', 0);
@@ -1732,7 +1863,7 @@ async function catalogView(kind, key, token) {
   if (!info) { location.replace('#/home'); return; }
   if (info.service) {
     const list = await loadServices(); const s = list.find(x => x.key === key) || info.service;
-    const q = `with_watch_providers=${s.ids}&with_watch_monetization_types=flatrate${s.region ? '&watch_region=' + s.region : ''}`;
+    const q = serviceQuery(s);
     Object.assign(info, { service: s, mq: q, tq: q });
   }
   if (token !== routeToken) return;
@@ -1740,10 +1871,12 @@ async function catalogView(kind, key, token) {
   const st = { type: info.mq == null ? 'tv' : 'movie', sort: sorts[0][0], page: 0, items: [], loading: false, end: false };
   const titleHTML = info.decade ? decadeLabel(info.decade, true) : `<h1>${esc(info.service || info.studio ? info.title : T(info.title))}</h1>`;
   const subText = info.studio ? `${T('Films from')} ${info.title}` : info.decade ? (S.lang === 'ar' ? `${T('The best films of the')} ${T(info.title)}` : `The best films of the ${info.title}`) : null;
-  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
+  const head = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="banner" style="--c1:${info.c1};--c2:${info.c2}">${info.row ? `<img class="kb" data-row="${info.row}" data-key="${key}" data-size="w1280" alt="" data-ok><i class="scrim"></i>` : ''}${info.franchise ? `<img class="kb" id="bn-art" data-art="${info.franchise.key}" data-size="w1280" alt="" data-ok><i class="scrim"></i>` : ''}${info.genre || info.scene ? `<canvas id="bn-scene" class="${info.decade ? 'era-fx' : ''}"></canvas>` : ''}${info.studio ? `<span class="slogo bn" data-art="${info.studio.key}"><i></i></span>` : ''}
       <div class="ttl">${info.service ? logoHTML(info.service, 0, 58) : (!info.genre && info.emoji ? `<span style="font-size:44px" class="emoji-b">${info.emoji}</span>` : '')}
-        <div>${titleHTML}<p>${esc(subText || (info.service ? `${T('Streaming now on')} ${info.title}` : info.genre ? (S.lang === 'ar' ? `أفضل عناوين ${T(info.title)}` : info.sub) : T(info.sub)))}</p></div></div></div>
+        <div>${titleHTML}<p>${esc(subText || (info.service ? `${T('Streaming now on')} ${info.title}` : info.genre ? (S.lang === 'ar' ? `أفضل عناوين ${T(info.title)}` : info.sub) : T(info.sub)))}</p></div></div></div>`;
+  if (info.service) { serviceRows(info, head, token); return; }
+  view.innerHTML = head + `
     <div class="gutter">
       ${info.mq != null && info.tq != null ? `<div class="chips" id="types"><button class="chip on" data-t="movie">${T("Movies")}</button><button class="chip" data-t="tv">${T("Shows")}</button></div>` : ''}
       ${info.sortable ? `<div class="chips" id="sorts" style="padding-top:2px">${sorts.map(([k, l], i) => `<button class="chip sm ${i ? '' : 'on'}" data-s="${k}">${T(l)}</button>`).join('')}</div>` : ''}
@@ -1788,6 +1921,37 @@ async function catalogView(kind, key, token) {
   view.querySelectorAll('#sorts .chip').forEach(b => b.onclick = () => { view.querySelectorAll('#sorts .chip').forEach(x => x.classList.toggle('on', x === b)); st.sort = b.dataset.s; reset(); });
   new IntersectionObserver(es => es[0].isIntersecting && load(), { rootMargin: '900px' }).observe($('#cmore'));
   load();
+}
+/**
+ * A streaming service's page, laid out like Home: its Top 10 movies and series (with rank numbers), then the newest and
+ * the most popular movies and series on it. Rows fill in as they arrive; a row with nothing in it is left out.
+ */
+function serviceRows(info, head, token) {
+  const s = info.service, q = serviceQuery(s);
+  const rows = [['top', 'movie'], ['top', 'tv'], ['new', 'movie'], ['new', 'tv'], ['pop', 'movie'], ['pop', 'tv']];
+  const sk = `<div class="rail-title gutter"><span class="sk sk-t"></span></div><div class="rail gutter">${'<div class="sk sk-p"></div>'.repeat(6)}</div>`;
+  view.innerHTML = head + rows.map(([r, k]) => `<section class="svc-row" id="sr-${r}-${k}">${sk}</section>`).join('') + '<div id="svc-none" hidden></div>';
+  if (info.genre || info.scene) GenreScenes.attach($('#bn-scene'), info.scene || info.genre, 0);
+  view.querySelectorAll('.banner [data-art]').forEach(fillArt);
+  let pending = rows.length, shown = 0;
+  const fill = (id, label, items, ranked) => {
+    const el = $('#sr-' + id); pending--;
+    if (token !== routeToken || !el) return;
+    const title = `${T(label)} ${s.name}`;
+    if (!items.length) el.remove();
+    else {
+      shown++;
+      el.innerHTML = ranked ? `<div class="rail-title gutter">${esc(title)}</div><div class="rail gutter ranked" style="--c1:${info.c1}">${items.slice(0, 10).map((x, i) => `<div class="rank-item"><span class="rank-n" aria-hidden="true">${i + 1}</span>${posterCard(x, i)}</div>`).join('')}</div>`
+        : `<div class="rail-title gutter">${esc(title)}</div><div class="rail gutter">${items.map((x, i) => posterCard(x, i)).join('')}</div>`;
+    }
+    if (!pending && !shown) { const n = $('#svc-none'); n.hidden = false; n.innerHTML = `<div class="gutter">${msg('Nothing here', 'Try another region (Settings → Region).')}</div>`; }
+  };
+  serviceTop10(s).then(t => ['movie', 'tv'].forEach(k => fill('top-' + k, top10Label(k, t[k].source), t[k].items, true)));
+  const sorts = { new: SORTS.find(x => x[0] === 'new'), pop: SORTS.find(x => x[0] === 'popular') };
+  const label = { new: { movie: 'Newest movies on', tv: 'Newest series on' }, pop: { movie: 'Popular movies on', tv: 'Popular series on' } };
+  for (const r of ['new', 'pop']) for (const k of ['movie', 'tv'])
+    api.discover(k, q, k === 'movie' ? sorts[r][2] : sorts[r][3], 1).catch(() => [])
+      .then(l => fill(`${r}-${k}`, label[r][k], l.filter(x => x.poster_path), false));
 }
 async function forYou() {
   const seeds = LIB.slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);

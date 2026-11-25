@@ -787,15 +787,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* ---------------- Home → Franchises / Production Studios / Decades */
 .tile.fr { width: 200px; height: 112px; }
-.tile.st { width: 164px; height: 90px; }
-.tile.dec { width: 168px; height: 96px; }
+/* Genres, Production Studios and Decades: one size (same as the apps) */
+.tile.st, .tile.dec, .tile.genre.ph { width: 168px; height: 96px; }
 .tile.discover.ph { width: 200px; height: 112px; }
-.tile.genre.ph { width: 156px; height: 88px; }
 .tile.ph .scrim { background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.72)); }
 .tile.ph .lbl b, .tile.ph .lbl small { text-shadow: 0 2px 8px rgba(0,0,0,.85); }
 .tile .era { position: absolute; inset: 0; }
 .era-fx { opacity: .55; }
-@media (min-width: 700px) { .tile.fr { width: 236px; height: 132px; } .tile.st { width: 196px; height: 108px; } .tile.dec { width: 200px; height: 112px; } .tile.discover.ph { width: 236px; height: 132px; } .tile.genre.ph { width: 184px; height: 104px; } }
+@media (min-width: 700px) { .tile.fr { width: 236px; height: 132px; } .tile.st, .tile.dec { width: 200px; height: 112px; } .tile.discover.ph { width: 236px; height: 132px; } .tile.genre.ph { width: 200px; height: 112px; } }
 img.kb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; animation: kenburns 16s ease-in-out infinite alternate; will-change: transform; }
 img.kb.ok { opacity: 1; }
 @keyframes kenburns { 0% { transform: scale(1.12) translate(3%, 0); } 50% { transform: scale(1.17) translate(-3%, 2%); } 100% { transform: scale(1.1) translate(1%, -2%); } }
@@ -1084,3 +1083,43 @@ img.kb.ok { opacity: 1; }
   .lift-opts { grid-row: 1 / 3; grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) { .lift-bg, .lift-card, .lift-opts, .lift-opt { animation: none; opacity: 1; } }
+
+/* Streaming Services, showcase style: what's on each service cross-fades behind its brand colour */
+.tile.service.show { width: 240px; height: 135px; padding: 0; display: block; animation-name: tileIn; }
+.tile.service.show::before { display: none; }
+.show-pics, .show-wash { position: absolute; inset: 0; }
+.show-pics img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.04); transition: opacity .9s cubic-bezier(.4,0,.2,1); }
+.show-pics img.on { opacity: 1; }
+.tile.show.cycling .show-pics img.on { animation: showDrift 16s ease-in-out infinite alternate; }
+@keyframes showDrift { from { transform: scale(1.04) translateX(-5px); } to { transform: scale(1.08) translateX(5px); } }
+.show-wash { background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--c1) 18%, transparent) 40%, color-mix(in srgb, var(--c2) 45%, #000) 100%),
+  linear-gradient(to right, color-mix(in srgb, var(--c2) 40%, rgba(0,0,0,.6)), transparent 70%); }
+.show-lbl { position: absolute; left: 10px; right: 10px; bottom: 12px; display: flex; align-items: center; gap: 9px; z-index: 1; min-width: 0; }
+.show-lbl > span { min-width: 0; }
+.show-logo { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto; object-fit: cover; background: var(--c1); }
+.show-lbl b { display: block; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.show-lbl small { display: block; font-size: 11px; opacity: .78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.show-lbl small.tick { animation: showTick .5s ease-out; }
+@keyframes showTick { from { opacity: 0; transform: translateY(6px); } }
+.show-line { position: absolute; left: 10px; right: 10px; bottom: 5px; height: 2px; border-radius: 1px; background: rgba(255,255,255,.22); opacity: 0; transition: opacity .3s; }
+.tile.show.cycling .show-line { opacity: 1; }
+.show-line i { display: block; height: 100%; background: #fff; transform-origin: left; transform: scaleX(0); }
+.show-line.go i { animation: showLine 4.2s linear forwards; }
+@keyframes showLine { to { transform: scaleX(1); } }
+@media (min-width: 700px) { .tile.service.show { width: 300px; height: 169px; } }
+@media (prefers-reduced-motion: reduce) { .show-pics img { transition: none; } .tile.show .show-pics img.on { animation: none; } }
+
+/* Streaming service page: Top 10 rows — each poster stands on its rank, a tall outlined number in the service's colour */
+.svc-row { min-height: 0; }
+.sk-t { display: inline-block; width: 180px; height: 18px; border-radius: 6px; }
+.sk-p { flex: none; width: var(--poster); aspect-ratio: 2 / 3; }
+.rail.ranked { gap: 10px; }
+.rank-item { display: flex; align-items: flex-end; flex: none; }
+.rank-n {
+  position: relative; z-index: 0; margin-right: -10px; padding: 0 .06em 30px 0; min-width: .62em; text-align: right;
+  font: 900 calc(var(--poster) * .98)/.8 system-ui, sans-serif; letter-spacing: -.06em;
+  color: transparent; -webkit-text-stroke: 2px rgba(255, 255, 255, .75);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c1, #fff) 55%, transparent), rgba(0, 0, 0, .2));
+  -webkit-background-clip: text; background-clip: text; user-select: none;
+}
+.rank-item .poster { position: relative; z-index: 1; }
