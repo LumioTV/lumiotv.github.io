@@ -281,6 +281,10 @@ const P = {
   library: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z',
   settings: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   play: 'M8 5v14l11-7z', pause: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z',
+  heart: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
+  history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z',
+  share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z',
+  smartDisplay: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM9.5 16.5v-9l7 4.5-7 4.5z',
   back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
   bookmark: 'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z',
   bookmarkO: 'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z',
@@ -386,11 +390,12 @@ function fromApp(a) {
     tmdbKey: a.tmdbKey || '', region: a.region || 'US',
     accent: ver < 4 && a.accentPreset === 'custom' && isOliveHex(longToHex(a.customAccent ?? 0xFF7C5CFF)) ? 'midnight' : (a.accentPreset || 'midnight'), customAccent: longToHex(a.customAccent ?? 0xFF7C5CFF), amoled: !!a.amoled,
     titleColor: a.titleColor || 'white', arabicFont: a.arabicFont || 'cinema', iconColor: iconColor || 'midnight',
-    bgTheme: a.bgTheme || 'dark', antiSpoiler: !!a.antiSpoiler,
+    bgTheme: a.bgTheme || 'dark', antiSpoiler: !!a.antiSpoiler, navStyle: a.navStyle === 'compact' || a.navStyle === 'adaptive' ? 'compact' : 'standard',
     intro: a.introAnimation !== false, introSound: a.introSound !== false,
     skipIntro: (a.skipIntro || 'BUTTON').toLowerCase(), skipRecap: (a.skipRecap || 'BUTTON').toLowerCase(), skipCredits: (a.skipCredits || 'BUTTON').toLowerCase(),
     skipNudity: !!a.skipNudity, subLang, trailers: a.trailerPreviews || 'sound', subScale: a.subtitleScale ?? 1, subBg: a.subtitleBackground ?? true,
     autoNext: a.autoPlayNext ?? true, lang: a.language || raw.get('lumio.deviceLang', 'en'),
+    teams: Array.isArray(a.followedTeams) ? a.followedTeams : [],
     iptv: Array.isArray(a.iptvSources) ? a.iptvSources : [], favs: Array.isArray(a.favChannels) ? a.favChannels : [], recents: Array.isArray(a.recentChannels) ? a.recentChannels : [],
     addons,
   };
@@ -399,11 +404,12 @@ function toApp(w, base) {
   return Object.assign({}, base, {
     tmdbKey: w.tmdbKey, region: w.region, accentPreset: w.accent, customAccent: hexToLong(w.customAccent), amoled: !!w.amoled,
     titleColor: w.titleColor || 'white', arabicFont: w.arabicFont || 'cinema', iconColor: w.iconColor || 'midnight',
-    bgTheme: w.bgTheme || 'dark', antiSpoiler: !!w.antiSpoiler,
+    bgTheme: w.bgTheme || 'dark', antiSpoiler: !!w.antiSpoiler, navStyle: w.navStyle === 'compact' ? 'compact' : (base && base.navStyle === 'adaptive' ? 'adaptive' : 'standard'),
     introAnimation: w.intro !== false, introSound: w.introSound !== false,
     skipIntro: w.skipIntro.toUpperCase(), skipRecap: w.skipRecap.toUpperCase(), skipCredits: w.skipCredits.toUpperCase(), skipNudity: !!w.skipNudity,
     subtitleLanguage: w.subLang, trailerPreviews: w.trailers || 'sound', subtitleScale: w.subScale, subtitleBackground: w.subBg, autoPlayNext: w.autoNext, language: w.lang,
     iptvSources: w.iptv || [], favChannels: w.favs || [], recentChannels: w.recents || [],
+    followedTeams: Array.isArray(w.teams) ? w.teams : (base?.followedTeams || []),
     addons: w.addons.map(x => ({ manifestUrl: x.url, name: x.name, resources: x.resources || [], builtIn: !!x.builtIn,
       enabled: x.enabled !== false, configurable: !!x.configurable, version: x.version || '', description: x.description || null, logo: x.logo || null })),
     builtInAddonsVersion: Math.max(base.builtInAddonsVersion || 0, BUILT_IN_ADDONS_VERSION),
@@ -1291,8 +1297,11 @@ function renderNav(active) {
   const fresh = nav.dataset.sig !== sig;
   if (fresh) {
     nav.dataset.sig = sig;
-    nav.innerHTML = `<i class="nav-lamp" aria-hidden="true"></i>` + TABS.map(([k, l, i]) => `<a class="nav-item ${i === 'avatar' ? 'nav-me' : ''}" data-k="${k}" href="#/${k}" aria-label="${T(l)}" title="${T(l)}">${i === 'avatar' ? avatarHTML(me.avatar, me.avatarUrl, 26) : ic(i)}</a>`).join('');
+    // the island (what's playing on your TV / Chromecast) opens above the tabs, like the apps' bar
+    nav.innerHTML = `<div class="nav-island" id="nav-island"><div></div></div><div class="nav-row"><i class="nav-lamp" aria-hidden="true"></i>` + TABS.map(([k, l, i]) => `<a class="nav-item ${i === 'avatar' ? 'nav-me' : ''}" data-k="${k}" href="#/${k}" aria-label="${T(l)}" title="${T(l)}">${i === 'avatar' ? avatarHTML(me.avatar, me.avatarUrl, 26) : ic(i)}</a>`).join('') + '</div>';
+    navIsland(true);
   }
+  nav.classList.toggle('compact', S.navStyle === 'compact');   // Settings → Appearance → Navigation bar
   nav.querySelectorAll('.nav-item').forEach(a => { const on = a.dataset.k === active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
   nav.classList.toggle('hidden', !active);
   view.classList.toggle('no-nav', !active);
@@ -1661,7 +1670,7 @@ async function soccerMatches() {
   if (matchCache && Date.now() - matchCache.t < 45000) return matchCache.v;
   const now = Date.now(), from = now - 3 * 864e5, to = now + 7 * 864e5;
   const months = [...new Set([from, now, to].map(t => new Date(t).toISOString().slice(0, 7).replace('-', '')))];
-  const side = o => { const t = o.team || {}; return { id: String(t.id || ''), name: t.displayName || t.name || '', short: t.shortDisplayName || t.abbreviation || '', logo: t.logo || t.logos?.[0]?.href || null, score: o.score ?? null, winner: !!o.winner }; };
+  const side = o => { const t = o.team || {}; return { id: String(t.id || ''), name: t.displayName || t.name || '', short: t.shortDisplayName || t.abbreviation || '', logo: t.logo || t.logos?.[0]?.href || null, color: /^[0-9a-f]{6}$/i.test(t.color || '') ? t.color : null, score: o.score ?? null, winner: !!o.winner }; };
   const lists = await Promise.all(LEAGUES.flatMap(lg => months.map(m => getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.key}/scoreboard?dates=${m}`, 12000).then(j => (j.events || []).map(e => {
     try {
       const c = e.competitions[0], st = e.status || c.status, ty = st.type || {}, cs = c.competitors || [];
@@ -1683,14 +1692,6 @@ function dayLabel(t) {
     : d.toLocaleDateString(S.lang === 'ar' ? 'ar' : undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-/** Square card like the X app: league on top, crests and score (or kick-off) in the middle, status below. */
-function matchCard(m) {
-  const crest = sd => `<span class="mc-team"><img src="${esc(sd.logo || '')}" alt="" loading="lazy" data-err="hide"><b class="${sd.winner ? 'win' : ''}">${esc(sd.short || sd.name)}</b></span>`;
-  const mid = m.upcoming || m.home.score == null ? `<span class="mc-time">${hhmm(m.start)}</span>` : `<span class="mc-score">${esc(m.home.score)}-${esc(m.away.score)}</span>`;
-  const foot = m.live ? `<span class="mc-live"><i></i>${T('LIVE')} ${esc(m.clock || m.detail)}</span>` : m.finished ? `<span class="mc-ft">${esc(m.detail || 'FT')}</span>` : `<span class="mc-ft">${esc(dayLabel(m.start))}</span>`;
-  return `<button class="match ${m.live ? 'is-live' : ''}" data-mid="${esc(m.id)}"><span class="mc-lg">${esc(S.lang === 'ar' ? m.league.ar : m.league.name)}</span>
-    <span class="mc-mid">${crest(m.home)}${mid}${crest(m.away)}</span>${foot}</button>`;
-}
 /**
  * Channels in your playlists that should be showing this match: the broadcasters the feed lists, plus the usual
  * Arabic-region broadcaster of the competition (beIN SPORTS for the big European leagues, SSC / Thmanyah for the
@@ -1720,66 +1721,162 @@ async function watchMatch(m) {
   if (picks.length === 1) { closeSheet(); return playChannel(picks, 0); }
   sheet(m.home.name + ' vs ' + m.away.name, picks.map((ch, i) => ({ t: cleanName(ch.name), s: ch.groups[0] || '', icon: 'livetv', fn: () => playChannel(picks, i) })));
 }
-let soccerState = { filter: null, league: null };
-async function mountMatches(box) {
+/* soccer helpers: begin */
+/** Played: finished with a score (a postponed or cancelled match also ends as "post" in the feed, without one). */
+const played = m => m.finished && m.home.score != null && m.away.score != null && !/postpon|cancel/i.test(m.detail || '');
+/** Results: yesterday's and today's; if there were none, the last day that had any (as in the apps). */
+function recentResults(list, now = Date.now()) {
+  const sod = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const done = list.filter(m => played(m) && m.start <= now).sort((a, b) => b.start - a.start);
+  const recent = done.filter(m => m.start >= sod(now) - 864e5);
+  if (recent.length) return recent;
+  return done.length ? done.filter(m => m.start >= sod(done[0].start)) : [];
+}
+/** The Soccer tab's rows, in the apps' order: Live now, Today, Tomorrow, Coming up, Results (empty rows left out). */
+function soccerRows(list, now = Date.now()) {
+  const day = t => new Date(t).toDateString(), today = day(now), tomorrow = day(now + 864e5);
+  const later = m => m.start > now && day(m.start) !== today && day(m.start) !== tomorrow;
+  return [['Live now', list.filter(m => m.live)], ['Today', list.filter(m => m.upcoming && day(m.start) === today)],
+    ['Tomorrow', list.filter(m => m.upcoming && day(m.start) === tomorrow)], ['Coming up', list.filter(m => m.upcoming && later(m))],
+    ['Results', recentResults(list, now)]].filter(r => r[1].length);
+}
+/** A club's own colour from the feed, darkened so white text and crests stand out; a steady fallback otherwise. */
+function teamColor(hex, id) {
+  let c = /^[0-9a-f]{6}$/i.test(hex || '') ? [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)) : null;
+  if (!c) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    c = [[0x7A, 0x1F, 0x2B], [0x1F, 0x3F, 0x7A], [0x1F, 0x6B, 0x4A], [0x5B, 0x2A, 0x7A], [0x7A, 0x5A, 0x1F], [0x2A, 0x2F, 0x3A]][Math.abs(h) % 6]; }
+  return `rgb(${c.map(v => Math.round(v * 0.6)).join(',')})`;
+}
+/* soccer helpers: end */
+
+/** Kick-off time on a 24-hour clock, as in the apps ("14:25"). */
+const kickoff = t => new Date(t).toLocaleTimeString(S.lang === 'ar' ? 'ar' : 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Match card (as in the apps): the two clubs' colours split on a slant with their crests, the score or kick-off between. */
+function matchTile(m, teams) {
+  const star = sd => teams.has(sd.id) ? '⭐ ' : '';
+  const crest = sd => sd.logo ? `<img src="${esc(sd.logo)}" alt="" loading="lazy" data-err="hide">` : `<b>${esc((sd.short || sd.name).slice(0, 3).toUpperCase())}</b>`;
+  const mid = m.upcoming || m.home.score == null ? kickoff(m.start) : `${m.home.score} - ${m.away.score}`;
+  const when = m.live ? T('Live now') : m.finished ? `${m.detail || 'FT'} · ${dayLabel(m.start)}` : `${dayLabel(m.start)} ${kickoff(m.start)}`;
+  return `<button class="mt" data-mid="${esc(m.id)}"><span class="mt-card" style="--h:${teamColor(m.home.color, m.home.id)};--a:${teamColor(m.away.color, m.away.id)}">
+      <span class="mt-crest">${crest(m.home)}</span><span class="mt-crest">${crest(m.away)}</span><span class="mt-mid">${esc(mid)}</span>
+      ${m.live ? `<span class="mt-live"><i></i>${esc(m.clock || m.detail)}</span>` : ''}</span>
+    <span class="mt-teams"><b class="${m.home.winner ? 'win' : ''}">${star(m.home)}${esc(m.home.short || m.home.name)}</b><span>${T('vs')}</span><b class="${m.away.winner ? 'win' : ''}">${star(m.away)}${esc(m.away.short || m.away.name)}</b></span>
+    <span class="mt-when">${esc(when)} · ${esc(S.lang === 'ar' ? m.league.ar : m.league.name)}</span></button>`;
+}
+let soccerLeague = null;
+/** The Soccer tab's body: competition chips, then Live now, Today, My teams, Tomorrow, Coming up and Results. */
+async function mountSoccer(box) {
   const draw = list => {
     if (!box.isConnected) return;
-    const st = soccerState, filter = st.filter || (list.some(m => m.live) ? 'live' : 'upcoming');
-    const shown = list.filter(m => (!st.league || m.league.key === st.league) && (filter === 'live' ? m.live : filter === 'upcoming' ? m.upcoming : m.finished));
-    if (filter === 'results') shown.reverse();
+    const shown = list.filter(m => !soccerLeague || m.league.key === soccerLeague);
     const leagues = LEAGUES.filter(lg => list.some(m => m.league.key === lg.key)), live = list.filter(m => m.live).length;
-    box.innerHTML = `<div class="chips gutter" id="mf">${[['live', `🔴 ${T('Live')}${live ? ' ' + live : ''}`], ['upcoming', `🗓️ ${T('Upcoming')}`], ['results', `🏁 ${T('Results')}`]].map(([k, l]) => `<button class="chip ${filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
-      ${leagues.length > 1 ? `<div class="chips gutter" id="ml" style="padding-top:2px"><button class="chip sm ${!st.league ? 'on' : ''}" data-l="">${T('All competitions')}</button>${leagues.map(lg => `<button class="chip sm ${st.league === lg.key ? 'on' : ''}" data-l="${lg.key}">${esc(S.lang === 'ar' ? lg.ar : lg.name)}</button>`).join('')}</div>` : ''}
-      ${shown.length ? `<div class="rail gutter match-rail">${shown.slice(0, 60).map(matchCard).join('')}</div>`
-        : `<p class="gutter dim">${T(!list.length ? "Couldn't load the matches — check your internet connection." : filter === 'live' ? 'No matches are being played right now. See Upcoming.' : 'Nothing here for this competition.')}</p>`}`;
-    box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { st.filter = b.dataset.f; draw(list); });
-    box.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { st.league = b.dataset.l || null; draw(list); });
-    box.querySelectorAll('.match').forEach(b => b.onclick = () => { const m = list.find(x => x.id === b.dataset.mid); if (m && (m.live || m.upcoming)) watchMatch(m); });
+    const pill = $('#sc-live'); if (pill) pill.innerHTML = live ? `<span class="mt-live"><i></i>${live}</span>` : '';
+    const teams = S.teams || [], ids = new Set(teams.map(x => String(x.id)));
+    const rows = soccerRows(shown);
+    const matchRow = ([title, ms]) => `<h2 class="sc-h gutter">${esc(T(title))}</h2><div class="rail gutter sc-rail">${ms.slice(0, 40).map(m => matchTile(m, ids)).join('')}</div>`;
+    const teamsRow = `<h2 class="sc-h gutter">${esc(T('My teams'))}</h2><div class="rail gutter sc-rail">${teams.map(tm => {
+        const next = list.filter(m => (m.home.id === String(tm.id) || m.away.id === String(tm.id)) && !m.finished).sort((a, b) => a.start - b.start)[0];
+        const other = next && (next.home.id === String(tm.id) ? next.away : next.home);
+        const sub = next ? (next.live ? `${T('Live now')} ${next.home.score}-${next.away.score}` : `${dayLabel(next.start)} ${kickoff(next.start)} · ${T('vs')} ${other.short || other.name}`) : T('No matches in the next few days');
+        return `<button class="mt" data-team="${esc(tm.id)}"><span class="mt-card mt-team" style="--h:${teamColor(tm.color, tm.id)}">${tm.logo ? `<img src="${esc(tm.logo)}" alt="" loading="lazy" data-err="hide">` : `<b>${esc(String(tm.name).slice(0, 3).toUpperCase())}</b>`}
+          ${next?.live ? `<span class="mt-live"><i></i>${esc(next.clock)}</span>` : ''}</span><span class="mt-teams"><b>${esc(tm.name)}</b></span><span class="mt-when">${esc(sub)}</span></button>`;
+      }).join('')}<button class="mt" id="sc-add"><span class="mt-card mt-plus">${ic('plus')}</span><span class="mt-teams"><b>${T('Add')}</b></span><span class="mt-when">${T(teams.length ? 'Follow another team' : 'Follow a team for reminders')}</span></button></div>`;
+    box.innerHTML = `${leagues.length > 1 ? `<div class="chips gutter sc-chips"><button class="chip sm ${!soccerLeague ? 'on' : ''}" data-l="">${T('All competitions')}</button>${leagues.map(lg => `<button class="chip sm ${soccerLeague === lg.key ? 'on' : ''}" data-l="${lg.key}">${esc(S.lang === 'ar' ? lg.ar : lg.name)}</button>`).join('')}</div>` : ''}
+      ${!list.length ? `<p class="gutter dim">${T("Couldn't load the matches — check your internet connection.")}</p>`
+        : rows.slice(0, 2).map(matchRow).join('') + teamsRow + rows.slice(2).map(matchRow).join('') + (rows.length ? '' : `<p class="gutter dim">${T('Nothing here for this competition.')}</p>`)}`;
+    box.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { soccerLeague = b.dataset.l || null; draw(list); });
+    box.querySelectorAll('[data-mid]').forEach(b => b.onclick = () => { const m = list.find(x => x.id === b.dataset.mid); if (m && (m.live || m.upcoming)) watchMatch(m); else if (m) matchSheet(m, () => draw(list)); });
+    box.querySelectorAll('[data-team]').forEach(b => b.onclick = () => { const tm = (S.teams || []).find(x => String(x.id) === b.dataset.team); if (tm) teamSheet(tm, list, () => draw(list)); });
+    $('#sc-add', box)?.addEventListener('click', () => followSheet(() => draw(list)));
   };
-  box.innerHTML = `<div class="rail gutter match-rail">${'<div class="sk match"></div>'.repeat(6)}</div>`;
+  box.innerHTML = `<div class="rail gutter sc-rail" style="padding-top:44px">${'<div class="mt"><div class="sk mt-card"></div></div>'.repeat(4)}</div>`;
   const list = await soccerMatches().catch(() => []);
   draw(list);
   // keep live scores fresh while you're on the page
   const timer = setInterval(async () => { if (!box.isConnected) return clearInterval(timer); if (document.hidden) return; draw(await soccerMatches().catch(() => list)); }, list.some(m => m.live) ? 30000 : 120000);
 }
-
-/** Soccer tab (as in the phone app): live scores, fixtures and results; a live or upcoming match opens its channels. */
-function soccerView() {
-  view.innerHTML = `<div class="sports-head"><div class="gutter"><h1>${ic('soccer')} ${T('Soccer')}</h1><p class="dim">${T('Live scores, fixtures and results — tap a match to watch it')}</p></div></div>
-    <div id="soc-matches"></div>
-    ${sectionH('Channels')}<div class="rail gutter">${TV_CATS.filter(c => c.key === 'sports').map((c, i) => tvTile(c, i, `#/tv/free/${c.key}`, T(c.name), c.emoji, 'tv_' + c.key)).join('')}</div>`;
-  mountMatches($('#soc-matches', view));
+/** Follow or unfollow a club (synced with the apps, which remind you before its matches). */
+function toggleTeam(tm) {
+  const on = (S.teams || []).some(x => String(x.id) === String(tm.id));
+  S.teams = on ? S.teams.filter(x => String(x.id) !== String(tm.id)) : [...(S.teams || []), { id: String(tm.id), name: tm.name, logo: tm.logo || null, color: tm.color || null }];
+  saveSettings(); toast(`${T(on ? 'Unfollow' : 'Following')} · ${tm.name}`);
+}
+/** A finished match: follow either club. */
+function matchSheet(m, redraw) {
+  const ids = new Set((S.teams || []).map(x => String(x.id)));
+  sheet(`${m.home.name} ${T('vs')} ${m.away.name}`, [m.home, m.away].map(sd => ({ t: `${T(ids.has(sd.id) ? 'Unfollow' : 'Follow')} ${sd.name}`, icon: 'star', fn: () => { toggleTeam(sd); redraw(); } })));
+}
+/** A club you follow: its next matches, and Unfollow. */
+function teamSheet(tm, list, redraw) {
+  const id = String(tm.id), games = list.filter(m => m.home.id === id || m.away.id === id);
+  const pick = [...games.filter(m => m.live), ...games.filter(m => m.upcoming), ...games.filter(played).sort((a, b) => b.start - a.start).slice(0, 2)];
+  sheet(tm.name, [...pick.map(g => { const other = g.home.id === id ? g.away : g.home;
+      return { t: `${T('vs')} ${other.name}`, s: g.live ? `${T('LIVE')} ${g.home.score}-${g.away.score}` : g.finished ? `${g.home.score}-${g.away.score} · ${dayLabel(g.start)}` : `${dayLabel(g.start)} ${hhmm(g.start)}`,
+        icon: g.live ? 'livetv' : 'cal', fn: () => { if (g.live || g.upcoming) watchMatch(g); } }; }),
+    { t: `${T('Unfollow')} ${tm.name}`, icon: 'star', fn: () => { toggleTeam(tm); redraw(); } }]);
+}
+/** Follow a team: choose a competition, then its clubs (ESPN's list, as in the apps). */
+function followSheet(redraw) {
+  sheet('Follow a team', LEAGUES.map(lg => ({ t: S.lang === 'ar' ? lg.ar : lg.name, icon: 'soccer', fn: async () => {
+    const name = S.lang === 'ar' ? lg.ar : lg.name;
+    sheet(name, [{ t: 'Loading…' }]);
+    const j = await getJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg.key}/teams`, 12000).catch(() => null);
+    const teams = (j?.sports?.[0]?.leagues?.[0]?.teams || []).map(e => e.team).filter(t => t && t.id)
+      .map(t => ({ id: String(t.id), name: t.displayName || t.name, logo: t.logos?.[0]?.href || null, color: /^[0-9a-f]{6}$/i.test(t.color || '') ? t.color : null })).sort((a, b) => a.name.localeCompare(b.name));
+    if (!$('.sheet')) return;
+    if (!teams.length) return sheet(name, [{ t: "Couldn't load", s: 'Check your internet connection.' }]);
+    const draw = () => sheet(name, teams.map(tm => ({ t: tm.name, on: (S.teams || []).some(x => String(x.id) === tm.id), icon: 'star', keep: true, fn: () => { toggleTeam(tm); redraw(); draw(); } })));
+    draw();
+  } })));
 }
 
-/** Live TV tab: favourites, recently watched, countries (Kuwait first), categories and your playlists — all animated. */
+/** Soccer tab (as in the phone app): competitions, then Live now, Today, My teams, Tomorrow, Coming up and Results. */
+function soccerView() {
+  view.innerHTML = `<div class="sc"><h1 class="sc-title gutter">${ic('soccer')}<span>${T('Soccer')}</span><span id="sc-live"></span></h1><div id="soc-matches"></div></div>`;
+  mountSoccer($('#soc-matches', view));
+}
+
+/**
+ * Live TV tab, like the phone app's: your lists as rows (Favourites, Recently watched), then your playlists and "Add
+ * playlist", then the free channels by country and by type. Each row: its picture on its colours, name and count.
+ */
 async function liveTvView(token) {
   if (needsHls('x.m3u8')) setTimeout(() => needLib('hls'), 1500);   // channels are HLS: have the player library ready before one is picked
-  const favs = (S.favs || []).map(savedToCh), recents = (S.recents || []).map(savedToCh), favSet = new Set((S.favs || []).map(x => x.url));
+  const favs = S.favs || [], recents = S.recents || [];
   const cols = [['#2563EB', '#0B1E45'], ['#9333EA', '#2A0B45'], ['#0D9488', '#052A26'], ['#EA580C', '#3A1505']];
-  view.innerHTML = `<div class="sports-head tv-head"><div class="gutter"><h1>${ic('livetv')} ${T('Live TV')}</h1><p class="dim">${T('Free channels from the Gulf and the Arab world, plus your own playlists')}</p></div></div>
-    ${favs.length ? sectionH('Favourites') + `<div class="rail gutter ch-rail" id="tv-fav">${favs.map((c, i) => chCard(c, i, favSet)).join('')}</div>` : ''}
-    ${recents.length ? sectionH('Recently watched') + `<div class="rail gutter ch-rail" id="tv-rec">${recents.map((c, i) => chCard(c, i, favSet)).join('')}</div>` : ''}
-    ${sectionH('⚽ Matches', 'Live scores, fixtures and results — tap a match to watch it')}<div id="tv-matches"></div>
-    ${sectionH('Countries', 'Free channels, streamed by the broadcasters themselves')}
-    <div class="rail gutter">${TV_COUNTRIES.map((c, i) => tvTile(c, i, `#/tv/free/${c.key}`, T(c.name), c.emoji, 'tv_' + c.key)).join('')}</div>
-    ${sectionH('Categories', 'Arabic and Gulf channels by type')}
-    <div class="rail gutter">${TV_CATS.map((c, i) => tvTile(c, i, `#/tv/free/${c.key}`, T(c.name), c.emoji, 'tv_' + c.key)).join('')}</div>
-    ${sectionH('My playlists', 'Add an M3U link or an Xtream Codes login from your TV provider')}
-    <div class="rail gutter">${(S.iptv || []).map((p, i) => tvTile({ c1: cols[i % 4][0], c2: cols[i % 4][1] }, i, `#/tv/src/${p.id}`, p.name, p.kind === 'xtream' ? '🔐' : '📃', 'tv_playlist',
-      `<span class="tile-x" data-del="${esc(p.id)}" title="${T('Remove')}">✕</span>`)).join('')}<button class="tile add-pl" id="add-pl">${ic('plus')}<b>${T('Add playlist')}</b><small class="dim">M3U · Xtream</small></button></div>
-    <p class="gutter dim small-note">${T('Free channels come from iptv-org, an open list of streams the broadcasters publish themselves. Some may be offline or blocked outside their country.')}</p>`;
-  view.querySelectorAll('canvas[data-scene]').forEach(c => window.GenreScenes && GenreScenes.attach(c, c.dataset.scene, +c.dataset.i));
-  mountMatches($('#tv-matches'));
-  if (favs.length) bindChannels($('#tv-fav'), favs);
-  if (recents.length) bindChannels($('#tv-rec'), recents);
+  const row = (href, c1, c2, pic, label, count, extra = '') => `<a class="lt-row fly" href="${href}"><span class="lt-ic" style="--c1:${c1};--c2:${c2}">${pic}</span><b>${esc(label)}</b>${count != null ? `<span class="lt-n">${count}</span>` : ''}${extra}</a>`;
+  const emoji = e => `<span class="lt-emo">${e}</span>`;
+  view.innerHTML = `<div class="lt"><h1 class="lt-title gutter">${T('Live TV')}</h1>
+    ${favs.length || recents.length ? `<div class="lt-list gutter">${favs.length ? row('#/tv/my/fav', '#E11D48', '#3A0614', ic('heart'), T('Favourites'), favs.length) : ''}${recents.length ? row('#/tv/my/recent', '#0E7490', '#071A2E', ic('history'), T('Recently watched'), recents.length) : ''}</div>` : ''}
+    <h2 class="lt-sec gutter">${T('My playlists')}</h2>
+    <div class="lt-list gutter">${(S.iptv || []).map((p, i) => row(`#/tv/src/${p.id}`, cols[i % 4][0], cols[i % 4][1], emoji(p.kind === 'xtream' ? '🔐' : '📃'), p.name, null,
+      `<span class="lt-x" data-del="${esc(p.id)}" role="button" aria-label="${esc(T('Remove'))}">${ic('close')}</span>`)).join('')}
+      <button class="lt-row fly" id="add-pl"><span class="lt-ic lt-add">${ic('plus')}</span><b>${T('Add playlist')}</b><span class="lt-n">M3U · Xtream</span></button></div>
+    <h2 class="lt-sec gutter">${T('Countries')}</h2>
+    <div class="lt-list gutter">${TV_COUNTRIES.map(c => row(`#/tv/free/${c.key}`, c.c1, c.c2, emoji(c.emoji), T(c.name), null)).join('')}</div>
+    <h2 class="lt-sec gutter">${T('Categories')}</h2>
+    <div class="lt-list gutter">${TV_CATS.map(c => row(`#/tv/free/${c.key}`, c.c1, c.c2, emoji(c.emoji), T(c.name), null)).join('')}</div>
+    <p class="gutter dim small-note">${T('Free channels come from iptv-org, an open list of streams the broadcasters publish themselves. Some may be offline or blocked outside their country.')}</p></div>`;
+  view.querySelectorAll('.lt-row.fly').forEach((r, i) => r.style.animationDelay = Math.min(i, 14) * 25 + 'ms');
   $('#add-pl').onclick = addPlaylistSheet;
   view.querySelectorAll('[data-del]').forEach(x => x.onclick = e => { e.preventDefault(); e.stopPropagation();
     const p = (S.iptv || []).find(q => q.id === x.dataset.del); if (!p || !confirm(`${T('Remove this playlist from your account?')}\n${p.name}`)) return;
     S.iptv = S.iptv.filter(q => q.id !== p.id); saveSettings(); liveTvView(token); });
 }
 
+/** Favourites / Recently watched: one channel a row (logo, name, category), as in the phone app. Long-press = favourite. */
+function myChannelsView(key) {
+  const fav = key === 'fav', list = ((fav ? S.favs : S.recents) || []).map(savedToCh), favSet = new Set((S.favs || []).map(x => x.url));
+  view.innerHTML = `<div class="lt"><div class="lt-head gutter"><a class="icon-btn" href="#" data-act="back" aria-label="${esc(T('Back'))}">${ic('back')}</a>
+      <h1>${T(fav ? 'Favourites' : 'Recently watched')}</h1><sup>${list.length}</sup></div>
+    <div class="gutter">${list.length ? `<div class="ch-rows" id="ch-rows">${list.map((c, i) => chCard(c, i, favSet)).join('')}</div>`
+      : `<p class="dim">${T(fav ? 'Hold a channel to add it to your favourites' : 'Channels you watch show up here')}</p>`}</div></div>`;
+  if (list.length) bindChannels($('#ch-rows'), list);
+}
+
 /** One country / category / playlist: search, category chips, channel grid. Long-press = favourite. */
 async function channelsView(kind, key, token) {
+  if (kind === 'my') return myChannelsView(key);
   const cat = kind === 'free' ? [...TV_COUNTRIES, ...TV_CATS].find(c => c.key === key) : null;
   const src = kind === 'src' ? (S.iptv || []).find(p => p.id === key) : null;
   if (!cat && !src) { location.replace('#/livetv'); return; }
@@ -1972,76 +2069,181 @@ async function forYou() {
 }
 
 // ============================================================================ details
+/* title-page helpers: begin */
+/**
+ * The picture at the top of a title's page (as in the apps): on a phone-shaped screen a poster without writing on it
+ * (TMDB marks those with no language), with the title's logo over it; else the wide backdrop, then the normal poster.
+ */
+function heroPick(images, backdrop, poster, tall) {
+  const plain = (images?.posters || []).filter(p => !p.iso_639_1 && !/\.svg$/i.test(p.file_path || '')).sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0))[0];
+  if (tall && plain) return { path: plain.file_path, portrait: true };
+  if (backdrop) return { path: backdrop, portrait: false };
+  if (plain) return { path: plain.file_path, portrait: true };
+  if (poster) return { path: poster, portrait: true };
+  return { path: null, portrait: false };
+}
+/** "2021–2024" for a show that ended, "2021–" while it runs, one year for a film or a one-year show. */
+function yearsOf(first, last, ended) {
+  const a = /^\d{4}/.test(first || '') ? first.slice(0, 4) : '';
+  if (!a) return '';
+  const b = /^\d{4}/.test(last || '') ? last.slice(0, 4) : '';
+  if (!b) return a;
+  return !ended ? `${a}–` : a === b ? a : `${a}–${b}`;
+}
+/** Minutes still to watch, rounded up; null when not started, finished or of unknown length. */
+function minutesLeft(pos, dur) {
+  if (!(dur > 0) || !(pos > 0) || pos >= dur) return null;
+  return Math.ceil((dur - pos) / 60000);
+}
+/** Episode search: a number finds that episode; words find names that contain them (accents ignored). */
+function episodeMatches(q, number, name) {
+  q = String(q || '').trim();
+  if (!q) return true;
+  if (/^\d+$/.test(q)) return +q === number;
+  const plain = x => String(x || '').normalize('NFD').replace(/\p{Mn}+/gu, '').toLowerCase();
+  return plain(name).includes(plain(q));
+}
+/* title-page helpers: end */
+
+/**
+ * A title's page, the same as the phone app's: the picture fills the top with the logo over it (the trailer plays
+ * there by itself), then what it is, one Watch button ("Resume S1 E5 · 5 min left"), a row of actions (My List,
+ * Trailer, Cast, Download, Share), seasons and episodes, and the cast. Scroll, and a bar keeps Back and the logo
+ * pinned at the top.
+ */
 async function detailsView(type, id, token) {
-  view.innerHTML = `<div class="sk" style="height:min(560px,72vh);border-radius:0"></div>`;
+  view.innerHTML = `<div class="sk" style="height:min(640px,62vh);border-radius:0"></div>`;
   if (await lockGate(type, id, token)) return;
   const d = await api.details(type, id);
   if (token !== routeToken) return;
-  const e = libEntry(type, id), resume = isContinue(e) ? e : null, wide = innerWidth >= 700;
+  const e = libEntry(type, id), resume = isContinue(e) ? e : null;
+  const tall = innerHeight > innerWidth * 1.1;                       // a phone held upright: the poster fills the top
+  const hero = heroPick(d.images, d.backdrop_path, d.poster_path, tall);
+  const heroSrc = hero.path && IMG + (hero.portrait ? 'w780' : innerWidth >= 1000 ? 'original' : 'w1280') + hero.path;
   const seasons = (d.seasons || []).filter(s => s.season_number > 0);
   let season = resume?.season || seasons[0]?.season_number || 1;
   const runtime = d.runtime || (d.episode_run_time || [])[0];
-  const playLabel = resume ? (type === 'tv' ? `${T(resume.next && !resuming(resume) ? 'Play' : 'Resume')} S${resume.season}E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season}E1` : T('Play');
-  const playHref = type === 'tv' ? `#/streams/tv/${id}/${resume?.season || season}/${resume?.episode || 1}` : `#/streams/movie/${id}/-/-`;
-  view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
-    <div class="backdrop" id="d-top">${img(d.backdrop_path && IMG + (wide ? 'original' : 'w1280') + d.backdrop_path)}<div class="trailer-box" id="d-trailer"></div>
-      <button class="icon-btn mute-btn" id="d-mute" hidden aria-label="${T('Sound')}">${ic('volOff')}</button>
-      <div class="d-info gutter"><div class="pst">${img(d.poster_path && IMG + 'w342' + d.poster_path)}</div>
-        <div style="min-width:0;max-width:640px">${titleArt(pickLogo(d.images?.logos), titleOf(d), 'd-logo')}${d.tagline ? `<div class="tag">${esc(d.tagline)}</div>` : ''}
-          <div class="meta">${yearOf(d) ? `<span class="badge">${yearOf(d)}</span>` : ''}${d.vote_average ? `<span class="badge">★ ${d.vote_average.toFixed(1)}</span>` : ''}${runtime ? `<span class="badge">${Math.floor(runtime / 60) ? Math.floor(runtime / 60) + 'h ' : ''}${runtime % 60}m</span>` : ''}<span id="d-age"></span>${type === 'tv' ? `<span class="badge">${seasons.length} ${T("Seasons")}</span>` : ''}</div>
-          <div class="genres">${esc((d.genres || []).map(g => g.name).join(' • '))}</div>
-          <div class="row-btns"><a class="btn white" id="d-play" href="${playHref}" title="${T('Hold or right-click to choose the source yourself')}">${ic('play')}${esc(playLabel)}</a>
-          <button class="icon-btn" id="wl" style="background:rgba(255,255,255,.14)" aria-label="Watchlist">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button>
-          ${SESSION || /Chrome\//.test(navigator.userAgent) ? `<button class="icon-btn" id="d-tv" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Cast to TV'))}" title="${esc(T('Cast to TV'))}">${ic('cast')}</button>` : ''}
-          <button class="icon-btn" id="d-dl" style="background:rgba(255,255,255,.14)" aria-label="${esc(T('Download'))}" title="${esc(T('Download'))}">${ic('download')}</button>
-          ${bestTrailer(d.videos) ? `<button class="btn tonal" id="d-tr">${ic('movie')}${T('Trailer')}</button>` : ''}</div>
-        </div></div></div>
-    <p class="overview gutter">${esc(d.overview)}</p>
-    ${type === 'tv' ? `<div class="chips gutter" id="seasons">${seasons.map(s => `<button class="chip ${s.season_number === season ? 'on' : ''}" data-n="${s.season_number}">${esc(s.name)}</button>`).join('')}</div><div class="eps gutter" id="eps"></div>` : ''}
-    ${(d.credits?.cast || []).length ? `<div class="rail-title gutter">${T("Cast")}</div><div class="rail gutter">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" data-href="#/person/${c.id}">${c.profile_path ? `<img src="${IMG}w185${esc(c.profile_path)}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}`;
-  ageRating(type, id).then(a => { const el = $('#d-age'); if (el && a?.label) el.outerHTML = `<span class="badge age">${esc(a.label)}</span>`; });
-  // The trailer starts by itself over the artwork (muted unless Settings → Appearance says sound; tap 🔇 for sound)
+  const ps = type === 'tv' ? (resume?.season || season) : null, pe = type === 'tv' ? (resume?.episode || 1) : null;
+  const playLabel = resume ? (type === 'tv' ? `${T(resume.next && !resuming(resume) ? 'Play' : 'Resume')} S${resume.season} E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season} E1` : T('Play');
+  const left = resume && resuming(resume) ? minutesLeft(resume.pos, resume.dur) : null;
+  const playHref = type === 'tv' ? `#/streams/tv/${id}/${ps}/${pe}` : `#/streams/movie/${id}/-/-`;
+  const logo = pickLogo(d.images?.logos), name = titleOf(d);
   const trKey = bestTrailer(d.videos);
-  if (trKey) $('#d-tr').onclick = () => { detailTrailer?.stop(); $('#d-mute').hidden = true; trailerOverlay(trKey); };
-  let detailTrailer = null;
+  const canCast = SESSION || /Chrome\//.test(navigator.userAgent);
+  const meta = [yearsOf(d.release_date || d.first_air_date, type === 'tv' ? d.last_air_date : null, d.status === 'Ended' || d.status === 'Canceled'),
+    type === 'movie' && runtime ? `${Math.floor(runtime / 60) ? Math.floor(runtime / 60) + 'h ' : ''}${runtime % 60}m` : '', type === 'tv' ? `${seasons.length} ${T('Seasons')}` : ''].filter(Boolean);
+  const act = (key, icon, label, on) => `<button class="tp-act ${on ? 'on' : ''}" id="${key}">${ic(icon)}<span>${esc(T(label))}</span></button>`;
+  view.innerHTML = `<div class="tp">
+    <a class="icon-btn back tp-back" href="#" data-act="back" aria-label="${esc(T('Back'))}">${ic('back')}</a>
+    <div class="tp-bar" id="tp-bar" aria-hidden="true"><a class="icon-btn" href="#" data-act="back" aria-label="${esc(T('Back'))}" tabindex="-1">${ic('back')}</a>
+      <div class="tp-bar-logo">${titleArt(logo, name, 'tp-mini')}</div><button class="icon-btn" id="tp-wl2" tabindex="-1" aria-label="${esc(T('My List'))}">${ic(e?.watch ? 'bookmark' : 'bookmarkO')}</button></div>
+    <div class="tp-hero ${hero.portrait ? 'portrait' : ''}" id="d-top">
+      <div class="tp-pic">${img(heroSrc, '', true)}</div><div class="trailer-box" id="d-trailer"></div><div class="tp-shade"></div>
+      <div class="tp-head">${titleArt(logo, name, 'tp-logo')}
+        <div class="tp-meta">${meta.map(m => `<span>${esc(m)}</span>`).join('')}${d.vote_average ? `<span class="tp-star">★ ${d.vote_average.toFixed(1)}</span>` : ''}<span id="d-age"></span></div></div>
+      <button class="icon-btn mute-btn" id="d-mute" hidden aria-label="${esc(T('Sound'))}">${ic('volOff')}</button>
+    </div>
+    <div class="tp-story">${(d.genres || []).length ? `<div class="tp-genres">${esc(d.genres.map(g => g.name).join('  ·  '))}</div>` : ''}
+      ${d.overview ? `<p class="tp-ov" id="tp-ov">${esc(d.overview)}</p><button class="tp-more" id="tp-more" hidden>${esc(T('Show more'))}</button>` : ''}</div>
+    <div class="tp-watch"><a class="tp-play" id="d-play" href="${playHref}" title="${esc(T('Hold or right-click to choose the source yourself'))}">${ic('play')}<b>${esc(playLabel)}</b>${left ? `<span>·  ${left} ${esc(T('min left'))}</span>` : ''}</a></div>
+    <div class="tp-acts">${act('wl', e?.watch ? 'bookmark' : 'bookmarkO', 'My List', e?.watch)}${trKey ? act('d-tr', 'smartDisplay', 'Trailer') : ''}${canCast ? act('d-tv', 'cast', 'Cast') : ''}${act('d-dl', 'download', 'Download')}${act('d-share', 'share', 'Share')}</div>
+    ${type === 'tv' ? `<h2 class="tp-h">${esc(T('Episodes'))}</h2>${seasons.length > 1 ? `<div class="tp-seasons" id="seasons">${seasons.map(s => `<button class="tp-pill ${s.season_number === season ? 'on' : ''}" data-n="${s.season_number}">${esc(s.name)}</button>`).join('')}</div>` : ''}
+      <div class="tp-search" id="tp-search" hidden><input type="search" id="tp-q" placeholder="${esc(T('Search episodes'))}" autocomplete="off">${ic('search')}</div><div class="tp-eps" id="eps"></div>` : ''}
+    ${(d.credits?.cast || []).length ? `<h2 class="tp-h">${esc(T('Cast'))}</h2><div class="rail tp-cast">${d.credits.cast.slice(0, 20).map(c => `<div class="cast" role="link" tabindex="0" data-href="#/person/${c.id}">${c.profile_path ? `<img src="${IMG}w185${esc(c.profile_path)}" alt="" loading="lazy">` : '<div class="ph"></div>'}<span>${esc(c.name)}</span><span class="dim">${esc(c.character || '')}</span></div>`).join('')}</div>` : ''}
+  </div>`;
+  ageRating(type, id).then(a => { const el = $('#d-age'); if (el && a?.label) el.outerHTML = `<span class="tp-age">${esc(a.label)}</span>`; });
+  // The story: three lines, "Show more" when there's more
+  const ov = $('#tp-ov'), more = $('#tp-more');
+  if (ov && more) {
+    requestAnimationFrame(() => { if (ov.scrollHeight > ov.clientHeight + 2) more.hidden = false; });
+    more.onclick = () => { const open = ov.classList.toggle('open'); more.textContent = T(open ? 'Show less' : 'Show more'); };
+  }
+  // The trailer starts by itself over the picture (muted unless Settings → Appearance says sound; tap 🔇 for sound);
+  // it pauses while you've scrolled the picture away and carries on when you come back up
+  let detailTrailer = null, trailerOn = false;
+  if (trKey) $('#d-tr').onclick = () => { detailTrailer?.cmd('pauseVideo'); trailerOverlay(trKey); };
   if (trKey && S.trailers !== 'off') setTimeout(() => {
     const box = $('#d-trailer'); if (!box || token !== routeToken) return;
-    // Browsers only allow sound after you've clicked something on the page, which you have to get here
     let muted = S.trailers === 'muted';
     const mb = $('#d-mute');
     detailTrailer = mountTrailer(box, trKey, { muted,
-      onPlay: () => { mb.hidden = false; box.classList.add('on'); },
+      onPlay: () => { mb.hidden = false; box.classList.add('on'); $('#d-top')?.classList.add('playing'); trailerOn = true; },
       onSound: on => { muted = !on; mb.innerHTML = ic(on ? 'volOn' : 'volOff'); },
-      onFail: () => { mb.hidden = true; }, onEnd: () => { mb.hidden = true; box.classList.remove('on'); detailTrailer?.stop(); } });
+      onFail: () => { mb.hidden = true; }, onEnd: () => { mb.hidden = true; box.classList.remove('on'); $('#d-top')?.classList.remove('playing'); trailerOn = false; detailTrailer?.stop(); detailTrailer = null; } });
     mb.innerHTML = ic('volOff');
-    mb.onclick = () => detailTrailer.setSound(muted);
+    mb.onclick = () => detailTrailer?.setSound(muted);
   }, 1200);
-  // Play: the best stream straight away; hold / right-click: the sources list
-  tapOrHold($('#d-play'), () => quickPlay(type, id, type === 'tv' ? (resume?.season || season) : null, type === 'tv' ? (resume?.episode || 1) : null), () => { location.hash = playHref; });
-  $('#d-dl').onclick = () => downloadSheet(type, id, type === 'tv' ? season : null);
-  if ($('#d-tv')) $('#d-tv').onclick = () => playOnTv({ type, id, title: titleOf(d), season: type === 'tv' ? (resume?.season || season) : null, episode: type === 'tv' ? (resume?.episode || 1) : null });
-  $('#wl').onclick = () => {
-    updateLib(type, id, cur => Object.assign(cur || { type, id, title: titleOf(d), poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, cur && cur.watch ? { watch: false } : { watch: true, noUp: false }));
-    const on = libEntry(type, id)?.watch; $('#wl').innerHTML = ic(on ? 'bookmark' : 'bookmarkO'); toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
+  // Scrolling: the picture drifts at half speed, and a bar with Back · logo · My List fades in as it leaves
+  const top = $('#d-top'), bar = $('#tp-bar'), pic = $('.tp-pic', top);
+  let paused = false;
+  const onScroll = () => {
+    if (!top.isConnected) return removeEventListener('scroll', onScroll);
+    const h = top.offsetHeight, y = scrollY;
+    if (pic && y < h) pic.style.transform = `translateY(${y * 0.45}px)`;
+    const shown = y > h - 120;
+    bar.classList.toggle('on', shown); bar.setAttribute('aria-hidden', String(!shown));
+    bar.querySelectorAll('a,button').forEach(x => x.tabIndex = shown ? 0 : -1);
+    const away = y > h * 0.6;
+    if (trailerOn && detailTrailer && away !== paused) { paused = away; detailTrailer.cmd(away ? 'pauseVideo' : 'playVideo'); }
   };
+  addEventListener('scroll', onScroll, { passive: true });
+  // Watch: the best stream straight away; hold / right-click: the sources list
+  tapOrHold($('#d-play'), () => quickPlay(type, id, ps, pe), () => { location.hash = playHref; });
+  $('#d-dl').onclick = () => downloadSheet(type, id, type === 'tv' ? season : null);
+  if ($('#d-tv')) $('#d-tv').onclick = () => playOnTv({ type, id, title: name, season: ps, episode: pe });
+  $('#d-share').onclick = () => shareTitle(name, type, id);
+  const toggleList = () => {
+    updateLib(type, id, cur => Object.assign(cur || { type, id, title: name, poster: d.poster_path, backdrop: d.backdrop_path, pos: 0, dur: 0 }, cur && cur.watch ? { watch: false } : { watch: true, noUp: false }));
+    const on = !!libEntry(type, id)?.watch;
+    $('#wl').innerHTML = `${ic(on ? 'bookmark' : 'bookmarkO')}<span>${esc(T('My List'))}</span>`; $('#wl').classList.toggle('on', on);
+    $('#tp-wl2').innerHTML = ic(on ? 'bookmark' : 'bookmarkO');
+    toast(on ? 'Added to Watchlist' : 'Removed from Watchlist');
+  };
+  $('#wl').onclick = toggleList; $('#tp-wl2').onclick = toggleList;
   if (type === 'tv') {
-    const showSeason = async n => {
-      season = n; view.querySelectorAll('#seasons .chip').forEach(c => c.classList.toggle('on', +c.dataset.n === n));
-      const box = $('#eps'); box.innerHTML = '<div class="sk" style="height:96px"></div><div class="sk" style="height:96px"></div>';
-      const eps = await api.season(id, n).catch(() => []);
-      if (!box.isConnected || season !== n) return;
+    let eps = [], q = '';
+    const drawEps = () => {
+      const box = $('#eps'); if (!box) return;
       const le = libEntry(type, id);
-      box.innerHTML = eps.map((ep, i) => {
+      const shown = eps.filter(ep => episodeMatches(q, ep.episode_number, ep.name));
+      if (!shown.length) { box.innerHTML = q ? `<p class="dim tp-none">${esc(T('No episodes match'))}</p>` : ''; return; }
+      box.innerHTML = shown.map((ep, i) => {
         const cur = le && le.season === ep.season_number && le.episode === ep.episode_number, p = cur ? progressOf(le) : 0;
         const seen = (le?.eps || []).includes(`${ep.season_number}:${ep.episode_number}`);
         const hide = S.antiSpoiler && !seen && !(cur && p > 0);   // Anti Spoiler: not watched yet → no picture, no story
-        return `<a class="ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${i * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}"><div class="still">${hide ? `<span class="spoiler">${ic('eyeoff')}</span>` : img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && p < .92 ? `<span class="prog" style="width:${p * 100}%"></span>` : ''}</div><div><b>${ep.episode_number}. ${esc(ep.name)}</b>${cur && !seen ? `<small class="ep-here">${T('Continue')}</small>` : ''}${ep.runtime ? `<small class="dim">${ep.runtime}m</small>` : ''}<p${hide ? ' class="dim"' : ''}>${hide ? `<i>${T("Hidden until you've watched it")}</i>` : esc(ep.overview || '')}</p></div></a>`;
+        const mins = cur && !seen ? minutesLeft(le.pos, le.dur) : null;
+        const sub = [prettyDate(ep.air_date), ep.runtime ? ep.runtime + 'm' : ''].filter(Boolean).join('  ·  ');
+        return `<a class="tp-ep fly ${cur ? 'cur' : ''} ${seen ? 'seen' : ''}" style="animation-delay:${Math.min(i, 12) * 30}ms" href="#/streams/tv/${id}/${ep.season_number}/${ep.episode_number}">
+          <div class="still">${hide ? `<span class="spoiler">${ic('eyeoff')}</span>` : img(ep.still_path && IMG + 'w300' + ep.still_path)}${seen ? `<span class="ep-tick">${ic('check')}</span>` : ''}${p && !seen ? `<span class="prog" style="width:${Math.max(4, p * 100)}%"></span>` : ''}</div>
+          <div><b>${ep.episode_number}. ${esc(ep.name || `${T('Episode')} ${ep.episode_number}`)}</b>${sub ? `<small class="dim">${esc(sub)}</small>` : ''}${mins ? `<small class="tp-left">${mins} ${esc(T('min left'))}</small>` : ''}${hide ? `<small class="dim"><i>${T("Hidden until you've watched it")}</i></small>` : ''}</div></a>`;
       }).join('');
-      box.querySelectorAll('.ep').forEach(a => { const [, , , , sn, en] = a.getAttribute('href').split('/'); tapOrHold(a, () => quickPlay('tv', id, +sn, +en), () => { location.hash = a.getAttribute('href'); }); });
+      box.querySelectorAll('.tp-ep').forEach(a => { const [, , , , sn, en] = a.getAttribute('href').split('/'); tapOrHold(a, () => quickPlay('tv', id, +sn, +en), () => { location.hash = a.getAttribute('href'); }); });
     };
-    view.querySelectorAll('#seasons .chip').forEach(c => c.onclick = () => showSeason(+c.dataset.n));
+    const showSeason = async n => {
+      season = n; view.querySelectorAll('#seasons .tp-pill').forEach(c => c.classList.toggle('on', +c.dataset.n === n));
+      const box = $('#eps'); box.innerHTML = '<div class="sk" style="height:90px;border-radius:16px"></div><div class="sk" style="height:90px;border-radius:16px"></div>';
+      const got = await api.season(id, n).catch(() => []);
+      if (!box.isConnected || season !== n) return;
+      eps = got;
+      $('#tp-search').hidden = eps.length < 6 && !q;
+      drawEps();
+    };
+    let qt;
+    $('#tp-q').addEventListener('input', ev => { clearTimeout(qt); qt = setTimeout(() => { q = ev.target.value; drawEps(); }, 120); });
+    view.querySelectorAll('#seasons .tp-pill').forEach(c => c.onclick = () => showSeason(+c.dataset.n));
     showSeason(season);
   }
+}
+/** "9 Nov 2024" in the website's language, from a TMDB date. */
+function prettyDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return '';
+  try { return new Date(iso + 'T12:00:00').toLocaleDateString(S.lang === 'ar' ? 'ar' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return iso; }
+}
+/** Share a title as a link to its page here (the system share sheet, or the link copied). */
+async function shareTitle(name, type, id) {
+  const url = `https://lumiotv.github.io/#/details/${type}/${id}`;
+  if (navigator.share) { try { await navigator.share({ title: name, text: name, url }); return; } catch (err) { if (err && err.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { prompt(T('Share'), url); }
 }
 
 // ============================================================================ streams
@@ -2605,8 +2807,9 @@ function castTimes(f) {
 }
 /** While something is casting: a small floating Cast button on every page brings its controls back. */
 function castFab() {
+  navIsland();
   let b = document.getElementById('cast-fab');
-  const show = !!(CAST.kind && CAST.np) && !PLAYER.el;
+  const show = !!(CAST.kind && CAST.np) && !PLAYER.el && !!$('#nav')?.classList.contains('hidden');   // the bar shows it itself
   if (!show) { b?.remove(); return; }
   if (b) return;
   b = document.createElement('button'); b.id = 'cast-fab'; b.className = 'cast-fab';
@@ -2615,6 +2818,37 @@ function castFab() {
   document.body.appendChild(b);
 }
 setInterval(castFab, 1500);
+/* nav-island helpers: begin */
+/** What the bar's island shows: a film playing on your Lumio TV or Chromecast (null: nothing, the bar stays small). */
+function islandLive(cast, playerOpen) {
+  const np = cast && cast.kind && cast.np;
+  if (!np || playerOpen) return null;
+  return { title: np.title || '', where: cast.tv?.name || (cast.kind === 'chromecast' ? 'Chromecast' : 'TV'), poster: np.poster || null,
+    progress: np.dur > 0 ? Math.min(1, Math.max(0, np.pos / np.dur)) : 0, playing: !!np.playing };
+}
+/* nav-island helpers: end */
+/**
+ * The bar grows like the iPhone's island to show what's playing on your TV / Chromecast: picture, what and where,
+ * play/pause and how far along; tap it for the controls. It folds away when nothing is playing.
+ */
+function navIsland(force) {
+  const nav = $('#nav'), box = $('#nav-island'); if (!nav || !box) return;
+  const live = islandLive(CAST, !!PLAYER.el);
+  nav.classList.toggle('island', !!live);
+  if (!live) return;
+  const inner = box.firstElementChild, key = live.title + '|' + live.where + '|' + live.poster;
+  if (force || inner.dataset.key !== key) {
+    inner.dataset.key = key;
+    inner.innerHTML = `<button class="ni-open" aria-label="${esc(T('Open'))}"><span class="ni-pic">${live.poster ? `<img src="${IMG}w185${esc(live.poster)}" alt="">` : ic('cast')}</span>
+      <span class="ni-txt"><b>${esc(live.title)}</b><small>${esc(T('On'))} ${esc(live.where)}</small></span></button>
+      <button class="ni-pp" aria-label="${esc(T('Play/Pause'))}"></button><span class="ni-bar"><i></i></span>`;
+    $('.ni-open', inner).onclick = () => castOpen();
+    $('.ni-pp', inner).onclick = () => { castSend('toggle'); if (CAST.np) { CAST.np.playing = !CAST.np.playing; navIsland(); } };
+  }
+  const pp = $('.ni-pp', inner), was = pp.dataset.p;
+  if (was !== String(live.playing)) { pp.dataset.p = String(live.playing); pp.innerHTML = ic(live.playing ? 'pause' : 'play'); }
+  $('.ni-bar i', inner).style.width = (live.progress * 100).toFixed(1) + '%';
+}
 function castUpdate() {
   castFab();
   const np = CAST.np; if (!np || !$('#cast-card')) return;
@@ -4218,6 +4452,8 @@ function appearanceView() {
       <div class="ap-bgs">${BG_THEMES.map(([k, n, about, bg, s1, s2, glows]) => `<button class="ap-bg ${!S.amoled && S.bgTheme === k ? 'on' : ''}" data-bgt="${k}">
         <span class="sw" style="background:${glows.map(([c, x, y, r, a]) => `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${c === 'accent' ? 'var(--accent)' : c}${c === 'accent' ? '' : Math.round(Math.min(.6, a * 1.6) * 255).toString(16).padStart(2, '0')}, transparent ${Math.round(r * 70)}%)`).concat([bg]).join(', ')}">
           <i style="background:${s1}"></i><i style="background:${s2};width:70%"></i>${ic('check')}</span><b>${T(n)}</b><small class="dim">${T(about)}</small></button>`).join('')}</div></div></div>
+    <div class="card"><div class="set-row" style="display:block"><b>${T("Navigation bar")}</b><small class="dim">${T("Either size grows to show what's going on (casting, a film on your TV, downloads), like the iPhone's island. Tap it for the controls.")}</small>
+      <div class="chips" style="padding-top:12px">${[['standard', 'Standard'], ['compact', 'Compact']].map(([k, n]) => `<button class="chip ${(S.navStyle || 'standard') === k ? 'on' : ''}" data-nav="${k}">${T(n)}</button>`).join('')}</div></div></div>
     <div class="card"><div class="set-row"><div><b>${T("AMOLED black")}</b><small>${T("Use pure black backgrounds for OLED screens")}</small></div>${sw('amoled', S.amoled)}</div></div>
     <div class="card"><div class="set-row"><div><b>${T("Startup animation")}</b><small>${T("The wand writes the L when Lumio opens (any key or tap skips it)")}</small></div>${sw('apintro', S.intro !== false)}</div>
       ${S.intro !== false ? `<div class="set-row"><div><b>${T("Startup sound")}</b><small>${T("Soft and short; plays at your media volume and never over your music")}</small></div>${sw('apintros', S.introSound !== false)}</div>` : ''}</div>
@@ -4236,6 +4472,7 @@ function appearanceView() {
   $('#apcin').onclick = () => set({ accent: 'cinema', titleColor: 'cinema', arabicFont: 'cinema', iconColor: 'cinema' });
   $('#amoled').onclick = () => set({ amoled: !S.amoled });
   $('#antisp').onclick = () => set({ antiSpoiler: !S.antiSpoiler });
+  view.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { set({ navStyle: b.dataset.nav }); $('#nav')?.classList.toggle('compact', S.navStyle === 'compact'); });
   view.querySelectorAll('[data-bgt]').forEach(b => b.onclick = () => set({ bgTheme: b.dataset.bgt, amoled: false }));
   $('#apintro').onclick = () => set({ intro: S.intro === false });
   $('#apintros') && ($('#apintros').onclick = () => set({ introSound: S.introSound === false }));

@@ -1199,5 +1199,7 @@ window.LUMIO_AR = {
 "Liability": "المسؤولية",
 "As far as the law allows, Lumio isn't liable for losses that come from using it, from content you choose to play, or from services it links to.": "في حدود ما يسمح به القانون، لا يتحمّل Lumio مسؤولية الخسائر الناتجة عن استخدامه أو عن المحتوى الذي تختار تشغيله أو عن الخدمات التي يرتبط بها.",
 "Privacy": "الخصوصية",
-"How your data is handled is set out in the Privacy Policy.": "طريقة التعامل مع بياناتك موضّحة في سياسة الخصوصية."
+"How your data is handled is set out in the Privacy Policy.": "طريقة التعامل مع بياناتك موضّحة في سياسة الخصوصية.",
+"Hold a channel to add it to your favourites": "اضغط مطولاً على أي قناة لإضافتها إلى المفضلة",
+"Channels you watch show up here": "القنوات التي تشاهدها تظهر هنا"
 };
