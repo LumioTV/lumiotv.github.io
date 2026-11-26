@@ -412,11 +412,11 @@ function toApp(w, base) {
 // ---- library entries: app format ↔ web
 const fromEntry = e => ({ type: e.type, id: e.tmdbId, title: e.title || '', poster: e.posterPath || null, backdrop: e.backdropPath || null, watch: !!e.inWatchlist,
   pos: e.positionMs || 0, dur: e.durationMs || 0, season: e.season ?? null, episode: e.episode ?? null, url: e.lastStreamUrl || null, imdb: e.imdbId || null,
-  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode, noUp: !!e.hideUpcoming, gone: !!e.removed });
+  addon: e.addonName || null, watched: !!e.watched, pin: e.pinHash || null, updatedAt: e.updatedAt || 0, eps: Array.isArray(e.watchedEps) ? e.watchedEps : [], newEp: !!e.newEpisode, noUp: !!e.hideUpcoming, gone: !!e.removed, next: !!e.upNext });
 const toEntry = x => ({ tmdbId: x.id, type: x.type, title: x.title || '', posterPath: x.poster || null, backdropPath: x.backdrop || null, inWatchlist: !!x.watch,
   positionMs: Math.round(x.pos || 0), durationMs: Math.round(x.dur || 0), season: x.season ?? null, episode: x.episode ?? null,
   lastStreamUrl: x.url && !String(x.url).startsWith('blob:') ? x.url : null, imdbId: x.imdb || null, addonName: x.addon || null,
-  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp, hideUpcoming: !!x.noUp, removed: !!x.gone });
+  watched: !!x.watched, pinHash: x.pin || null, updatedAt: x.updatedAt || Date.now(), watchedEps: x.eps || [], newEpisode: !!x.newEp, hideUpcoming: !!x.noUp, removed: !!x.gone, upNext: !!x.next });
 
 const DEFAULT_SETTINGS = fromApp({});
 let S, LIB, GONE = [];
@@ -656,7 +656,12 @@ function updateLib(type, id, fn) {
   if (next) LIB.unshift(Object.assign(next, { updatedAt: Date.now() }));
   saveLib();
 }
-const isContinue = e => e && ((e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95) || e.newEp);   // newEp: a new episode of a show you'd caught up on
+/* up-next helpers: begin */
+const isContinue = e => e && ((e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95) || e.next || e.newEp);   // next: the episode after one you finished; newEp: a new episode of a show you'd caught up on
+const resuming = e => e && e.pos > 30000 && e.dur > 0 && e.pos / e.dur < .95;
+/** After an episode you finished: on to [n] (when it's out), from its start — same as the apps. No n: stays where it is. */
+const onToNext = (e, n) => n && n.released ? Object.assign(e, { season: n.season, episode: n.episode, pos: 0, dur: 0, url: null, next: true }) : Object.assign(e, { next: false });
+/* up-next helpers: end */
 const progressOf = e => e && e.dur > 0 ? Math.min(1, e.pos / e.dur) : 0;
 
 /** The Lumio icon (gradient square + play mark) in one of the Appearance colours, as a PNG data URL. */
@@ -1153,6 +1158,7 @@ function posterCard(x, i = 0, prog, cont, from = '') {
       ${x.vote_average ? `<span class="rate"><b>★</b> ${x.vote_average.toFixed(1)}</span>` : ''}
       <span class="badges">${badgesHTML(e)}</span>
       ${prog && cont && e && !e.newEp ? (l => l ? `<span class="cont-label">${esc(l)}</span>` : '')(contLabel(t, e.season, e.episode, e.pos, e.dur)) : ''}
+      ${cont && e && e.next && !e.newEp && !resuming(e) ? `<span class="cont-label">${esc(T('Next episode'))} · S${e.season} E${e.episode}</span>` : ''}
       ${prog ? `<span class="prog"><i style="width:${prog * 100}%"></i></span>` : ''}</div>
     <div class="t">${esc(titleOf(x))}</div>${yearOf(x) ? `<div class="y">${yearOf(x)}</div>` : ''}</a>`;
 }
@@ -1975,7 +1981,7 @@ async function detailsView(type, id, token) {
   const seasons = (d.seasons || []).filter(s => s.season_number > 0);
   let season = resume?.season || seasons[0]?.season_number || 1;
   const runtime = d.runtime || (d.episode_run_time || [])[0];
-  const playLabel = resume ? (type === 'tv' ? `${T('Resume')} S${resume.season}E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season}E1` : T('Play');
+  const playLabel = resume ? (type === 'tv' ? `${T(resume.next && !resuming(resume) ? 'Play' : 'Resume')} S${resume.season}E${resume.episode}` : T('Resume')) : type === 'tv' ? `${T('Play')} S${season}E1` : T('Play');
   const playHref = type === 'tv' ? `#/streams/tv/${id}/${resume?.season || season}/${resume?.episode || 1}` : `#/streams/movie/${id}/-/-`;
   view.innerHTML = `<a class="icon-btn back" href="#" data-act="back" aria-label="Back">${ic('back')}</a>
     <div class="backdrop" id="d-top">${img(d.backdrop_path && IMG + (wide ? 'original' : 'w1280') + d.backdrop_path)}<div class="trailer-box" id="d-trailer"></div>
@@ -2745,7 +2751,8 @@ function saveProgress() {
     if (done && r.type === 'movie') e.watched = true;
     if (done && r.season != null) e.eps = [...new Set([...(e.eps || []), `${r.season}:${r.episode}`])];
     e.newEp = false;
-    return e;
+    // finished an episode: Continue Watching moves on to the next one (when it's out), from its start
+    return onToNext(e, done && r.type === 'tv' ? PLAYER.upNext : null);
   });
 }
 /** Trailers stop when a video starts: the title page's own trailer, the hover card's and a full-screen one. */
@@ -3074,6 +3081,7 @@ function openPlayer() {
 
   // ---- next episode: "Up next" glass card near the end (or "not out yet" in the middle), like the apps
   const up = { next: undefined, shown: false, closed: false, at: 0 };
+  PLAYER.upNext = null;
   async function findNext() {
     if (up.next !== undefined || r.type !== 'tv' || r.season == null || !r.id) return;
     up.next = null;
@@ -3082,6 +3090,7 @@ function openPlayer() {
     const ep = cur.find(x => x.episode_number === r.episode + 1) || (await api.season(r.id, r.season + 1).catch(() => [])).sort((a, b) => a.episode_number - b.episode_number)[0];
     if (ep) up.next = { season: ep.season_number, episode: ep.episode_number, name: ep.name || `${T('Episode')} ${ep.episode_number}`, still: ep.still_path, air: ep.air_date || null,
       runtime: ep.runtime, released: !ep.air_date || ep.air_date <= today };
+    if (PLAYER.req === r) PLAYER.upNext = up.next;     // saveProgress moves Continue Watching on to it once this one's finished
   }
   const shortDate = iso => { if (!iso) return ''; const d = new Date(iso + 'T12:00:00'); return d.toLocaleDateString(S.lang === 'ar' ? 'ar' : undefined, d.getFullYear() === new Date().getFullYear() ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' }); };
   function showUpNext() {
@@ -3430,7 +3439,7 @@ function openPosterMenu(p) {
   }
   if (cont && e) {
     // kept, cleared and newer — a deleted one came back from other devices' copy
-    const clearCont = () => updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0 }));
+    const clearCont = () => updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0, next: false }));
     const conts = () => document.querySelectorAll(`.poster[data-cont="1"][data-k="${type}-${id}"]`);
     const dropPoster = x => { const r = x.parentElement; x.remove(); if (r && !r.querySelector('.poster')) { r.previousElementSibling?.remove(); r.remove(); } };
     opts = [
@@ -3457,7 +3466,7 @@ function openPosterMenu(p) {
     ];
     // Library → History: out of History (and Continue Watching); My List, ticks and locks stay — same as the apps
     if (from === 'history' && e) opts.push({ icon: 'remove', t: 'Remove from History', fn: () => unlockThen(type, id, title, () => {
-      updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0, newEp: false })); leave(); toast('Removed from History');
+      updateLib(type, id, cur => Object.assign(cur, { pos: 0, dur: 0, newEp: false, next: false })); leave(); toast('Removed from History');
     }) });
   }
   popup(header, opts);
