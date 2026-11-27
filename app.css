@@ -1336,3 +1336,31 @@ body:has(.glass-nav.island) #view:not(.no-nav) { padding-bottom: calc(var(--nav-
 .mt-plus svg { width: 44px; height: 44px; color: rgba(255,255,255,.85); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .sc-rail, .tp-cast { scroll-padding-inline: max(var(--pad), var(--safe-l)); }
+
+/* ---------------- PIN (as in the apps): a sheet from the bottom on phones, a compact card on big screens */
+.pin-bg { animation: fade .2s; }
+.pop.pin { width: min(400px, 100%); gap: 4px; padding: 26px 28px 22px; border-radius: 30px; }
+.pin-grab { display: none; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); margin-bottom: 10px; }
+.pin-ic { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pin-ic svg { width: 26px; height: 26px; }
+.pop.pin h3 { font-size: 21px; font-weight: 800; }
+.pop.pin small { font-size: 14px; }
+.pop.pin .dots4 { gap: 18px; margin: 18px 0 4px; }
+.pop.pin .dots4 i { width: 14px; height: 14px; background: rgba(255,255,255,.16); transform: scale(.78); }
+.pop.pin .dots4 i.on { background: var(--accent); transform: scale(1); }
+.pop.pin .pin-err { font-size: 13px; font-weight: 600; min-height: 20px; }
+.pop.pin .pad { grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(340px, 100%); margin-top: 8px; }
+.pop.pin .pad button { width: auto; height: 60px; border-radius: 20px; background: rgba(255,255,255,.07); font-size: 26px; font-weight: 500; display: grid; place-items: center; }
+.pop.pin .pad button:hover { background: rgba(255,255,255,.11); }
+.pop.pin .pad button:active { transform: scale(.94); background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.pop.pin .pad button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pop.pin .pad .pk-plain { background: transparent; }
+.pop.pin .pad .pk-plain svg { width: 26px; height: 26px; }
+.pop.pin .pad .pk-cancel { font-size: 15px; font-weight: 600; color: var(--accent); }
+@media (max-width: 700px) {
+  .pin-bg { place-items: end center; padding: 0; }
+  .pop.pin { width: 100%; max-width: 520px; border-radius: 30px 30px 0 0; border-bottom: 0; padding: 10px 28px calc(20px + var(--safe-b)); animation: pinUp .38s cubic-bezier(.2,.9,.3,1.1); }
+  .pin-grab { display: block; }
+  .pop.pin .pad { width: 100%; max-width: 360px; }
+}
+@keyframes pinUp { from { transform: translateY(100%); } to { transform: none; } }

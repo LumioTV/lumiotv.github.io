@@ -1201,5 +1201,6 @@ window.LUMIO_AR = {
 "Privacy": "الخصوصية",
 "How your data is handled is set out in the Privacy Policy.": "طريقة التعامل مع بياناتك موضّحة في سياسة الخصوصية.",
 "Hold a channel to add it to your favourites": "اضغط مطولاً على أي قناة لإضافتها إلى المفضلة",
-"Channels you watch show up here": "القنوات التي تشاهدها تظهر هنا"
+"Channels you watch show up here": "القنوات التي تشاهدها تظهر هنا",
+"Your sign-in on this device ended. Sign out, then sign in again.": "انتهى تسجيل دخولك على هذا الجهاز. سجّل الخروج ثم سجّل الدخول مرة أخرى."
 };

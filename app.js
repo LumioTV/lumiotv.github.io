@@ -281,6 +281,7 @@ const P = {
   library: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z',
   settings: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   play: 'M8 5v14l11-7z', pause: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z',
+  backspace: 'M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 8.41 15.41 12 19 15.59z',
   heart: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
   history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z',
   share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z',
@@ -470,6 +471,7 @@ function friendlyAuth(m) {
   if (/Email not confirmed/i.test(m)) return 'Please confirm your email first (check your inbox).';
   if (/Password should be/i.test(m)) return 'Password must be at least 8 characters';
   if (/rate limit/i.test(m)) return 'Too many attempts. Try again in a minute.';
+  if (/Refresh Token/i.test(m)) return 'Your sign-in on this device ended. Sign out, then sign in again.';
   return m;
 }
 async function authCall(path, body, tok) {
@@ -482,9 +484,28 @@ function saveSession(j) {
   SESSION = { access: j.access_token, refresh: j.refresh_token, expires: Date.now() + (j.expires_in || 3600) * 1000, uid: j.user?.id || SESSION?.uid, email: j.user?.email || SESSION?.email };
   raw.set('lumio.session', SESSION);
 }
+/* session helpers: begin */
+/** Run [fn] once for any number of callers at the same time; they all get its result. */
+function singleFlight(fn) { let p = null; return () => p || (p = Promise.resolve().then(fn).finally(() => { p = null; })); }
+/** Another tab of this website refreshed the sign-in already: use its newer session instead of the used refresh token. */
+function newerSession(mine, stored) { return stored && mine && stored.uid === mine.uid && stored.refresh && stored.refresh !== mine.refresh && (stored.expires || 0) >= (mine.expires || 0) ? stored : null; }
+/* session helpers: end */
+/**
+ * A refresh token works once. Two refreshes at the same time (two syncs here, or two tabs) left one holding a used
+ * token, and using it again ends the sign-in on the server ("Refresh Token Not Found"). So: one refresh at a time
+ * across all tabs (Web Locks), and a tab first takes the session another tab already refreshed.
+ */
+const refreshSession = singleFlight(async () => {
+  const run = async () => {
+    const other = newerSession(SESSION, raw.get('lumio.session'));
+    if (other) SESSION = other;
+    if (Date.now() > SESSION.expires - 60000) saveSession(await authCall('token?grant_type=refresh_token', { refresh_token: SESSION.refresh }));
+  };
+  if (navigator.locks?.request) await navigator.locks.request('lumio-session-refresh', run); else await run();
+});
 async function sbToken() {
   if (!SESSION) throw new Error('Signed out');
-  if (Date.now() > SESSION.expires - 60000) saveSession(await authCall('token?grant_type=refresh_token', { refresh_token: SESSION.refresh }));
+  if (Date.now() > SESSION.expires - 60000) await refreshSession();
   return SESSION.access;
 }
 // Versioned sync (same rules as the phone app): each upload names the cloud version it was based on.
@@ -3607,13 +3628,16 @@ function askSure(title, msg, yes) {
 function pinPad({ title, setNew, check }) {
   return new Promise(resolve => {
     closePop();
-    const bg = document.createElement('div'); bg.className = 'pop-bg';
+    // As in the apps: on a phone a sheet from the bottom (every key under your thumb), on a big screen a compact card;
+    // Cancel sits in the keypad's free corner. Digits, Backspace and Esc work from a keyboard too.
+    const bg = document.createElement('div'); bg.className = 'pop-bg pin-bg';
     let pin = '', first = null;
     const head = () => T(setNew ? (first == null ? 'Enter a new PIN' : 'Re-enter the PIN to confirm') : 'Enter PIN');
-    bg.innerHTML = `<div class="pop pin" role="dialog"><div class="pin-ic">${ic('lock')}</div><h3 id="pinh">${head()}</h3><small class="dim">${esc(title)}</small>
-      <div class="dots4" id="dots">${'<i></i>'.repeat(4)}</div><div class="pin-err" id="perr">&nbsp;</div>
-      <div class="pad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map(k => k ? `<button data-k="${k}" aria-label="${k === 'del' ? T('Delete') : k}">${k === 'del' ? '⌫' : k}</button>` : '<span></span>').join('')}</div>
-      <button class="btn tonal" id="pcancel" style="margin-top:6px">${T('Cancel')}</button></div>`;
+    bg.innerHTML = `<div class="pop pin" role="dialog" aria-modal="true" aria-labelledby="pinh"><i class="pin-grab" aria-hidden="true"></i><div class="pin-ic">${ic('lock')}</div>
+      <h3 id="pinh">${head()}</h3>${title ? `<small class="dim">${esc(title)}</small>` : ''}
+      <div class="dots4" id="dots" aria-hidden="true">${'<i></i>'.repeat(4)}</div><div class="pin-err" id="perr" role="status">&nbsp;</div>
+      <div class="pad">${['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(k => `<button data-k="${k}">${k}</button>`).join('')}
+        <button class="pk-plain pk-cancel" id="pcancel">${T('Cancel')}</button><button data-k="0">0</button><button class="pk-plain" data-k="del" aria-label="${T('Delete')}">${ic('backspace')}</button></div></div>`;
     document.body.appendChild(bg);
     const dots = bg.querySelectorAll('#dots i'), err = $('#perr', bg);
     const paint = () => dots.forEach((d, i) => d.classList.toggle('on', i < pin.length));
@@ -3631,6 +3655,8 @@ function pinPad({ title, setNew, check }) {
     const onKey = e => { if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('del'); else if (e.key === 'Escape') done(null); };
     document.addEventListener('keydown', onKey);
     $('#pcancel', bg).onclick = () => done(null);
+    bg.addEventListener('click', e => { if (e.target === bg) done(null); });   // tap outside: like Cancel
+    $('.pad button[data-k="1"]', bg).focus({ preventScroll: true });
   });
 }
 const verifyPin = (type, id, title) => pinPad({ title, check: async p => (await pinHash(type, id, p)) === libEntry(type, id)?.pin });
@@ -4087,7 +4113,8 @@ async function afterSignIn() {
 async function signOut() {
   closePlayer(true);
   await cloudPush(true);
-  try { await authCall('logout', {}, SESSION?.access); } catch { /* ignore */ }
+  // scope=local: only this browser signs out (the server's default signed out every device on the account)
+  try { await authCall('logout?scope=local', {}, await sbToken().catch(() => SESSION?.access)); } catch { /* ignore */ }
   raw.del(cacheKey()); raw.del(baseKey()); raw.del(pushedKey()); raw.del('lumio.session'); SESSION = null; CD = {}; PROFILE_ID = MAIN; PROFILE_CHOSEN = false;
   unlocked.clear(); loadProfileData(); applyTheme(); applyLang();
   loginView();
